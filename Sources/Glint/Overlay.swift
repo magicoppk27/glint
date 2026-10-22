@@ -134,7 +134,7 @@ final class OverlayView: NSView {
         owner?.views.forEach { if $0 !== self { $0.clearMouse() } }
         mouse = p
         let g = CGPoint(x: p.x + sf.minX, y: p.y + sf.minY)
-        if owner?.mode != .color, let w = owner?.window(at: g) {
+        if owner?.mode != .color, owner?.mode != .area, let w = owner?.window(at: g) {
             let r = w.frame.offsetBy(dx: -sf.minX, dy: -sf.minY).intersection(bounds)
             hovered = r.isNull ? nil : (w, r)
         } else {
@@ -286,7 +286,7 @@ final class OverlayView: NSView {
         case .text: text = "Drag over text or click a window   ·   Esc to cancel"
         case .scroll: text = "Select the area to scroll, or click a window   ·   Esc to cancel"
         case .color: text = "Click any pixel to copy its color   ·   Esc to cancel"
-        default: text = "Drag to select  ·  Click a window  ·  ⇧ square  ·  Esc cancel"
+        default: text = "Drag to select an area  ·  ⇧ square  ·  Esc cancel"
         }
         let s = NSAttributedString(string: text, attributes: [.font: NSFont.systemFont(ofSize: 12.5, weight: .medium), .foregroundColor: NSColor.white.withAlphaComponent(0.92)])
         let sz = s.size()

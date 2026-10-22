@@ -277,11 +277,12 @@ final class EditorModel: ObservableObject {
         Toast.show("Copied to clipboard")
     }
 
-    /// Copy, then get the editor out of the way so you can paste anywhere.
+    /// Copy, then disappear completely so you can paste anywhere.
+    /// (The capture stays in Glint's Recent captures if you need it again.)
     func copyAndClose() {
         guard let img = render() else { return }
         ImageStore.copy(img, scale: scale)
-        Toast.show("Copied — paste anywhere")
+        ThumbnailController.dismiss(animated: false)
         closeEditor?()
     }
 

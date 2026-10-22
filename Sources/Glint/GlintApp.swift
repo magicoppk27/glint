@@ -107,7 +107,7 @@ enum CaptureKind: String, CaseIterable, Identifiable {
 
     var subtitle: String {
         switch self {
-        case .area: "Drag, or click a window"
+        case .area: "Drag to select an area"
         case .fullscreen: "The display under the cursor"
         case .window: "Crisp, with transparency"
         case .text: "OCR & QR codes to clipboard"
