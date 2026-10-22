@@ -127,20 +127,39 @@ enum Renderer {
                 ctx.setFillColor(c); ctx.setStrokeColor(c); ctx.setLineWidth(r * 0.1)
                 ctx.drawPath(using: .fillStroke)
             }
+            // Label: a glossy pill tucked behind the badge so both read as one tag.
             if a.id != m.editingLabelID, let (label, pill, origin) = counterLabel(a) {
-                softShadow(ctx, m, k, alpha: 0.3)
-                ctx.addPath(CGPath(roundedRect: pill, cornerWidth: pill.height / 2, cornerHeight: pill.height / 2, transform: nil))
-                ctx.setFillColor(c); ctx.fillPath()
-                ctx.setShadow(offset: .zero, blur: 0)
+                let path = CGPath(roundedRect: pill, cornerWidth: pill.height / 2, cornerHeight: pill.height / 2, transform: nil)
+                ctx.saveGState()
+                softShadow(ctx, m, k, alpha: 0.28)
+                ctx.addPath(path); ctx.setFillColor(c); ctx.fillPath()
+                ctx.restoreGState()
+                fillGlossy(ctx, path, a.color, pill)
+                ctx.addPath(CGPath(roundedRect: pill.insetBy(dx: 0.5, dy: 0.5), cornerWidth: pill.height / 2, cornerHeight: pill.height / 2, transform: nil))
+                ctx.setStrokeColor(NSColor.white.withAlphaComponent(0.22).cgColor); ctx.setLineWidth(max(1, r * 0.05)); ctx.strokePath()
                 withFlippedNSContext(ctx) { label.draw(at: origin) }
             }
-            softShadow(ctx, m, k, alpha: 0.35)
-            ctx.setFillColor(c); ctx.fillEllipse(in: circle)
-            ctx.setShadow(offset: .zero, blur: 0)
-            ctx.setStrokeColor(NSColor.white.cgColor); ctx.setLineWidth(max(1.5, r * 0.12))
-            ctx.strokeEllipse(in: circle.insetBy(dx: r * 0.06, dy: r * 0.06))
+            // Badge: glossy gradient disc, soft highlight, crisp thin ring.
+            let disc = CGPath(ellipseIn: circle, transform: nil)
+            ctx.saveGState()
+            ctx.setShadow(offset: CGSize(width: 0, height: -1.5 * m.scale * k), blur: 5 * m.scale * k, color: NSColor.black.withAlphaComponent(0.38).cgColor)
+            ctx.addPath(disc); ctx.setFillColor(c); ctx.fillPath()
+            ctx.restoreGState()
+            fillGlossy(ctx, disc, a.color, circle)
+            ctx.saveGState()
+            ctx.addPath(disc); ctx.clip()
+            ctx.setFillColor(NSColor.white.withAlphaComponent(0.2).cgColor)
+            ctx.fillEllipse(in: CGRect(x: a.start.x - r * 0.7, y: a.start.y - r * 0.92, width: r * 1.4, height: r * 0.86))
+            ctx.restoreGState()
+            let ring = max(1.5, r * 0.1)
+            ctx.setStrokeColor(NSColor.white.cgColor); ctx.setLineWidth(ring)
+            ctx.strokeEllipse(in: circle.insetBy(dx: ring / 2, dy: ring / 2))
             let fg = counterForeground(a.color)
-            let s = NSAttributedString(string: "\(a.number)", attributes: [.font: roundedFont(r * 1.15, .bold), .foregroundColor: fg])
+            let numShadow = NSShadow()
+            numShadow.shadowColor = NSColor.black.withAlphaComponent(fg == .white ? 0.25 : 0)
+            numShadow.shadowOffset = NSSize(width: 0, height: -max(0.5, r * 0.04))
+            numShadow.shadowBlurRadius = r * 0.08
+            let s = NSAttributedString(string: "\(a.number)", attributes: [.font: roundedFont(r * 1.12, .heavy), .foregroundColor: fg, .shadow: numShadow])
             withFlippedNSContext(ctx) {
                 let sz = s.size()
                 s.draw(at: CGPoint(x: a.start.x - sz.width / 2, y: a.start.y - sz.height / 2))
@@ -161,7 +180,23 @@ enum Renderer {
         c.hexString == "#FFFFFF" || c.hexString == "#FFCC00" ? NSColor(white: 0.1, alpha: 1) : .white
     }
 
-    static func counterLabelFont(_ r: CGFloat) -> NSFont { roundedFont(r, .semibold) }
+    static func counterLabelFont(_ r: CGFloat) -> NSFont { roundedFont(r * 0.96, .semibold) }
+    static func counterLabelHeight(_ r: CGFloat) -> CGFloat { r * 1.5 }
+
+    static func shade(_ c: NSColor, _ f: CGFloat) -> NSColor {
+        let s = c.usingColorSpace(.sRGB) ?? c
+        return (f >= 0 ? s.blended(withFraction: f, of: .white) : s.blended(withFraction: -f, of: .black)) ?? s
+    }
+
+    /// Fills a shape with a soft top-to-bottom gradient of `color` (lighter on top).
+    static func fillGlossy(_ ctx: CGContext, _ path: CGPath, _ color: NSColor, _ bounds: CGRect) {
+        let colors = [shade(color, 0.24).cgColor, color.cgColor, shade(color, -0.14).cgColor] as CFArray
+        guard let g = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB), colors: colors, locations: [0, 0.5, 1]) else { return }
+        ctx.saveGState()
+        ctx.addPath(path); ctx.clip()
+        ctx.drawLinearGradient(g, start: CGPoint(x: bounds.midX, y: bounds.minY), end: CGPoint(x: bounds.midX, y: bounds.maxY), options: [])
+        ctx.restoreGState()
+    }
 
     /// Label pill that extends to the right of a step number, centred on it.
     static func counterLabel(_ a: Annotation) -> (NSAttributedString, CGRect, CGPoint)? {
@@ -169,9 +204,9 @@ enum Renderer {
         let r = a.width
         let s = NSAttributedString(string: a.text, attributes: [.font: counterLabelFont(r), .foregroundColor: counterForeground(a.color)])
         let sz = s.size()
-        let h = r * 1.6
-        let textX = a.start.x + r * 1.45
-        let pill = CGRect(x: a.start.x, y: a.start.y - h / 2, width: textX - a.start.x + sz.width + r * 0.75, height: h)
+        let h = counterLabelHeight(r)
+        let textX = a.start.x + r * 1.42
+        let pill = CGRect(x: a.start.x, y: a.start.y - h / 2, width: textX - a.start.x + sz.width + r * 0.8, height: h)
         return (s, pill, CGPoint(x: textX, y: a.start.y - sz.height / 2))
     }
 

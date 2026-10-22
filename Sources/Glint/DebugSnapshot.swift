@@ -93,8 +93,10 @@ enum DebugSnapshot {
             let w = CGFloat(m.base.width), h = CGFloat(m.base.height)
             m.annotations = [
                 Annotation(kind: .arrow, start: CGPoint(x: w * 0.12, y: h * 0.85), end: CGPoint(x: w * 0.4, y: h * 0.55), color: palette[0], width: m.strokeWidth),
-                Annotation(kind: .rect, start: CGPoint(x: w * 0.55, y: h * 0.1), end: CGPoint(x: w * 0.9, y: h * 0.4), color: palette[4], width: m.strokeWidth),
-                Annotation(kind: .counter, start: CGPoint(x: w * 0.55, y: h * 0.1), end: .zero, color: palette[5], width: m.counterRadius, text: "Settings panel", number: 1),
+                Annotation(kind: .rect, start: CGPoint(x: w * 0.55, y: h * 0.3), end: CGPoint(x: w * 0.9, y: h * 0.6), color: palette[0], width: m.strokeWidth),
+                Annotation(kind: .counter, start: CGPoint(x: w * 0.55 + m.counterRadius, y: h * 0.3 - m.strokeWidth / 2 - 3 * m.scale - m.counterRadius), end: .zero, color: palette[0], width: m.counterRadius, text: "Step 3", number: 3),
+                Annotation(kind: .counter, start: CGPoint(x: w * 0.12, y: h * 0.62), end: .zero, color: palette[4], width: m.counterRadius, text: "Open Settings", number: 1),
+                Annotation(kind: .counter, start: CGPoint(x: w * 0.12, y: h * 0.74), end: .zero, color: palette[5], width: m.counterRadius, number: 4),
                 Annotation(kind: .counter, start: CGPoint(x: w * 0.2, y: h * 0.3), end: .zero, color: palette[0], width: m.counterRadius, text: "Click here first", number: 2, tip: CGPoint(x: w * 0.36, y: h * 0.48)),
                 Annotation(kind: .text, start: CGPoint(x: w * 0.08, y: h * 0.08), end: .zero, color: palette[1], width: m.fontSize, text: "Look here!"),
                 Annotation(kind: .blur, start: CGPoint(x: w * 0.6, y: h * 0.65), end: CGPoint(x: w * 0.9, y: h * 0.9), color: palette[0], width: 0),

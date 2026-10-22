@@ -285,9 +285,15 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         if big {
             model.add(d)
             if model.tool == .stepBox {
-                // Number sits on the box's top-left corner; label opens beside it.
+                // The tag sits just above the box's top-left corner, like a folder tab,
+                // so it never covers what the box highlights. Too close to the top edge: tuck it inside.
                 let r = model.counterRadius
-                let c = Annotation(kind: .counter, start: CGPoint(x: d.rect.minX, y: d.rect.minY), end: .zero, color: d.color, width: r, number: model.nextCounter)
+                let gap = d.width / 2 + 3 * model.scale
+                var center = CGPoint(x: d.rect.minX + r, y: d.rect.minY - gap - r)
+                if center.y - r < model.imageRect.minY {
+                    center = CGPoint(x: d.rect.minX + gap + r, y: d.rect.minY + gap + r)
+                }
+                let c = Annotation(kind: .counter, start: center, end: .zero, color: d.color, width: r, number: model.nextCounter)
                 model.annotations.append(c)
                 beginLabel(c.id)
             }
@@ -384,7 +390,7 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         tf.action = #selector(textAction)
         tf.cell?.wraps = false
         tf.cell?.isScrollable = true
-        let h = (r * 1.6).rounded()
+        let h = Renderer.counterLabelHeight(r).rounded()
         let vp = toView(a.start)
         tf.frame = CGRect(x: vp.x + r + 3, y: vp.y - h / 2, width: 140, height: h)
         tf.wantsLayer = true
