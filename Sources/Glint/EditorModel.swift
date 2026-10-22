@@ -3,7 +3,7 @@ import CoreImage
 import SwiftUI
 
 enum Tool: String, CaseIterable, Identifiable {
-    case select, arrow, line, rect, oval, pen, highlighter, text, counter, stepBox, blur, spotlight, measure, picker, crop
+    case select, arrow, line, rect, oval, pen, highlighter, text, counter, stepBox, blur, spotlight, magnifier, measure, picker, crop
 
     var id: String { rawValue }
 
@@ -21,6 +21,7 @@ enum Tool: String, CaseIterable, Identifiable {
         case .stepBox: "number.square"
         case .blur: "eye.slash"
         case .spotlight: "flashlight.on.fill"
+        case .magnifier: "plus.magnifyingglass"
         case .measure: "ruler"
         case .picker: "eyedropper"
         case .crop: "crop"
@@ -41,6 +42,7 @@ enum Tool: String, CaseIterable, Identifiable {
         case .stepBox: "Box + Step"
         case .blur: "Blur / Redact"
         case .spotlight: "Spotlight"
+        case .magnifier: "Magnifier — drag to size the lens"
         case .measure: "Ruler"
         case .picker: "Color Picker"
         case .crop: "Crop"
@@ -61,17 +63,18 @@ enum Tool: String, CaseIterable, Identifiable {
         case .stepBox: "q"
         case .blur: "b"
         case .spotlight: "s"
+        case .magnifier: "z"
         case .measure: "m"
         case .picker: "i"
         case .crop: "x"
         }
     }
 
-    var usesColor: Bool { ![.select, .blur, .spotlight, .picker, .crop].contains(self) }
+    var usesColor: Bool { ![.select, .blur, .spotlight, .magnifier, .picker, .crop].contains(self) }
 }
 
 struct Annotation: Identifiable {
-    enum Kind { case arrow, line, rect, oval, pen, highlighter, text, counter, blur, spotlight, measure }
+    enum Kind { case arrow, line, rect, oval, pen, highlighter, text, counter, blur, spotlight, magnifier, measure }
 
     var id = UUID()
     var kind: Kind
@@ -194,6 +197,8 @@ final class EditorModel: ObservableObject {
 
     var strokeWidth: CGFloat { [3, 5, 9][sizeIndex] * scale }
     var fontSize: CGFloat { [16, 24, 36][sizeIndex] * scale }
+    /// Magnifier zoom for the S / M / L size buttons.
+    var magnifierZoom: CGFloat { [1.6, 2.2, 3.0][sizeIndex] }
     var counterRadius: CGFloat { [11, 15, 20][sizeIndex] * scale }
     var nextCounter: Int { (annotations.filter { $0.kind == .counter }.map(\.number).max() ?? 0) + 1 }
 

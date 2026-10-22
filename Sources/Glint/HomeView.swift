@@ -690,7 +690,7 @@ struct ShortcutSettings: View {
                 LabeledContent("Copy without pasting") { Text("⌘⏎").foregroundStyle(.secondary) }
             }
             Section("Editor") {
-                LabeledContent("Tools") { Text("V A L R O D H T N Q B S M I X").font(.system(.body, design: .monospaced)).foregroundStyle(.secondary) }
+                LabeledContent("Tools") { Text("V A L R O D H T N Q B S Z M I X").font(.system(.body, design: .monospaced)).foregroundStyle(.secondary) }
                 LabeledContent("Colors") { Text("1 – 8").foregroundStyle(.secondary) }
                 LabeledContent("Copy color under cursor") { Text("⇥ hex · ⇧⇥ rgb").foregroundStyle(.secondary) }
                 LabeledContent("Backdrop") { Text("K").foregroundStyle(.secondary) }

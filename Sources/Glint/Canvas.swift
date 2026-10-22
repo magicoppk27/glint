@@ -205,6 +205,9 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         case .arrow, .line, .rect, .oval, .blur, .spotlight, .measure, .stepBox:
             let kind: Annotation.Kind = [.arrow: .arrow, .line: .line, .rect: .rect, .oval: .oval, .blur: .blur, .spotlight: .spotlight, .measure: .measure, .stepBox: .rect][m.tool]!
             draft = Annotation(kind: kind, start: p, end: p, color: m.color, width: m.strokeWidth)
+        case .magnifier:
+            // width stores the zoom factor; the lens radius is the drag distance
+            draft = Annotation(kind: .magnifier, start: p, end: p, color: m.color, width: m.magnifierZoom)
         case .pen, .highlighter:
             draft = Annotation(kind: m.tool == .pen ? .pen : .highlighter, start: p, end: p, points: [p], color: m.color, width: m.strokeWidth)
         case .text:
@@ -259,6 +262,8 @@ final class CanvasView: NSView, NSTextFieldDelegate {
             }
         case .arrow, .line, .measure:
             d.end = shift ? constrained(d.start, p, square: false) : p
+        case .magnifier:
+            d.end = p
         default:
             d.end = shift ? constrained(d.start, p, square: true) : p
         }
@@ -280,6 +285,7 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         switch d.kind {
         case .pen, .highlighter: big = !d.points.isEmpty
         case .arrow, .line, .measure: big = hypot(d.end.x - d.start.x, d.end.y - d.start.y) > 4 * model.scale
+        case .magnifier: big = hypot(d.end.x - d.start.x, d.end.y - d.start.y) > 10 * model.scale
         default: big = d.rect.width > 3 * model.scale && d.rect.height > 3 * model.scale
         }
         if big {

@@ -127,20 +127,15 @@ enum Renderer {
                 ctx.setFillColor(c); ctx.setStrokeColor(c); ctx.setLineWidth(r * 0.1)
                 ctx.drawPath(using: .fillStroke)
             }
-            // Label: a frosted-glass pill tucked behind the badge so both read as one tag.
+            // Same look as Glint's own numbered badges: a two-tone gradient with a soft colored glow.
             if a.id != m.editingLabelID, let (label, pill, origin) = counterLabel(a) {
                 let path = CGPath(roundedRect: pill, cornerWidth: pill.height / 2, cornerHeight: pill.height / 2, transform: nil)
-                drawGlass(ctx, m, k, path: path, bounds: pill, color: a.color)
+                drawBadgeFill(ctx, m, k, path: path, bounds: pill, color: a.color, glow: 0.38)
                 withFlippedNSContext(ctx) { label.draw(at: origin) }
             }
-            // Badge: a frosted-glass disc on top.
-            drawGlass(ctx, m, k, path: CGPath(ellipseIn: circle, transform: nil), bounds: circle, color: a.color)
+            drawBadgeFill(ctx, m, k, path: CGPath(ellipseIn: circle, transform: nil), bounds: circle, color: a.color, glow: 0.5)
             let fg = counterForeground(a.color)
-            let numShadow = NSShadow()
-            numShadow.shadowColor = NSColor.black.withAlphaComponent(fg == .white ? 0.25 : 0)
-            numShadow.shadowOffset = NSSize(width: 0, height: -max(0.5, r * 0.04))
-            numShadow.shadowBlurRadius = r * 0.08
-            let s = NSAttributedString(string: "\(a.number)", attributes: [.font: roundedFont(r * 1.12, .heavy), .foregroundColor: fg, .shadow: numShadow])
+            let s = NSAttributedString(string: "\(a.number)", attributes: [.font: roundedFont(r * 1.08, .bold), .foregroundColor: fg])
             withFlippedNSContext(ctx) {
                 let sz = s.size()
                 s.draw(at: CGPoint(x: a.start.x - sz.width / 2, y: a.start.y - sz.height / 2))
@@ -153,6 +148,8 @@ enum Renderer {
             drawMeasure(a, ctx, m, k)
         case .spotlight:
             break
+        case .magnifier:
+            drawMagnifier(a, ctx, m, k)
         }
         ctx.restoreGState()
     }
@@ -167,6 +164,79 @@ enum Renderer {
     static func shade(_ c: NSColor, _ f: CGFloat) -> NSColor {
         let s = c.usingColorSpace(.sRGB) ?? c
         return (f >= 0 ? s.blended(withFraction: f, of: .white) : s.blended(withFraction: -f, of: .black)) ?? s
+    }
+
+    /// Glint's brand gradient for purple; a matching two-tone gradient for other colors.
+    static func gradientPair(_ c: NSColor) -> (NSColor, NSColor) {
+        if c.hexString == palette[5].hexString { return (NSColor(hex: 0x7C5CFF), NSColor(hex: 0xC145F5)) }
+        guard let s = c.usingColorSpace(.sRGB) else { return (c, c) }
+        var h: CGFloat = 0, sat: CGFloat = 0, br: CGFloat = 0, al: CGFloat = 0
+        s.getHue(&h, saturation: &sat, brightness: &br, alpha: &al)
+        if sat < 0.12 { return br > 0.5 ? (NSColor(white: 0.93, alpha: 1), NSColor.white) : (NSColor(white: 0.08, alpha: 1), NSColor(white: 0.3, alpha: 1)) }
+        let a = NSColor(hue: (h - 0.025 + 1).truncatingRemainder(dividingBy: 1), saturation: min(1, sat * 1.05), brightness: br * 0.95, alpha: 1)
+        let b = NSColor(hue: (h + 0.04).truncatingRemainder(dividingBy: 1), saturation: sat * 0.85, brightness: min(1, br * 1.06), alpha: 1)
+        return (a, b)
+    }
+
+    /// Diagonal two-tone fill with a soft glow in the badge's own color (like the home tile icons).
+    static func drawBadgeFill(_ ctx: CGContext, _ m: EditorModel, _ k: CGFloat, path: CGPath, bounds b: CGRect, color: NSColor, glow: CGFloat) {
+        let (c1, c2) = gradientPair(color)
+        let h = b.height
+        ctx.saveGState()
+        ctx.setShadow(offset: CGSize(width: 0, height: -h * 0.09 * k), blur: h * 0.38 * k, color: c1.withAlphaComponent(glow).cgColor)
+        ctx.addPath(path); ctx.setFillColor(c1.cgColor); ctx.fillPath()
+        ctx.restoreGState()
+        if let g = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB), colors: [c1.cgColor, c2.cgColor] as CFArray, locations: [0, 1]) {
+            ctx.saveGState()
+            ctx.addPath(path); ctx.clip()
+            ctx.drawLinearGradient(g, start: CGPoint(x: b.minX, y: b.minY), end: CGPoint(x: b.maxX, y: b.maxY), options: [])
+            ctx.restoreGState()
+        }
+        // Faint light edge keeps the badge crisp on busy or same-colored backgrounds.
+        ctx.addPath(path)
+        ctx.setStrokeColor(NSColor.white.withAlphaComponent(0.3).cgColor)
+        ctx.setLineWidth(max(0.75, h * 0.03))
+        ctx.strokePath()
+    }
+
+    /// Round zoom lens: enlarges the screenshot under it, with a white rim, inner vignette and drop shadow.
+    static func drawMagnifier(_ a: Annotation, _ ctx: CGContext, _ m: EditorModel, _ k: CGFloat) {
+        let R = hypot(a.end.x - a.start.x, a.end.y - a.start.y)
+        guard R > 2 else { return }
+        let z = max(1.2, a.width)
+        let circle = CGRect(x: a.start.x - R, y: a.start.y - R, width: R * 2, height: R * 2)
+        let disc = CGPath(ellipseIn: circle, transform: nil)
+        ctx.saveGState()
+        ctx.setShadow(offset: CGSize(width: 0, height: -R * 0.06 * k), blur: R * 0.28 * k, color: NSColor.black.withAlphaComponent(0.42).cgColor)
+        ctx.addPath(disc); ctx.setFillColor(NSColor.white.cgColor); ctx.fillPath()
+        ctx.restoreGState()
+
+        ctx.saveGState()
+        ctx.addPath(disc); ctx.clip()
+        ctx.setFillColor(NSColor.white.cgColor); ctx.fill(circle)
+        ctx.saveGState()
+        ctx.translateBy(x: a.start.x, y: a.start.y)
+        ctx.scaleBy(x: z, y: z)
+        ctx.translateBy(x: -a.start.x, y: -a.start.y)
+        ctx.interpolationQuality = .high
+        drawImage(ctx, m.base, in: m.baseBounds)
+        ctx.restoreGState()
+        let sRGB = CGColorSpace(name: CGColorSpace.sRGB)
+        if let v = CGGradient(colorsSpace: sRGB, colors: [NSColor.black.withAlphaComponent(0).cgColor, NSColor.black.withAlphaComponent(0.2).cgColor] as CFArray, locations: [0, 1]) {
+            ctx.drawRadialGradient(v, startCenter: a.start, startRadius: R * 0.74, endCenter: a.start, endRadius: R, options: [])
+        }
+        if let sheen = CGGradient(colorsSpace: sRGB, colors: [NSColor.white.withAlphaComponent(0.22).cgColor, NSColor.white.withAlphaComponent(0).cgColor] as CFArray, locations: [0, 1]) {
+            ctx.drawLinearGradient(sheen, start: CGPoint(x: a.start.x, y: circle.minY), end: CGPoint(x: a.start.x, y: circle.minY + R * 0.9), options: [])
+        }
+        ctx.restoreGState()
+
+        let rim = max(2 * m.scale, R * 0.05)
+        ctx.setStrokeColor(NSColor(white: 0.97, alpha: 1).cgColor)
+        ctx.setLineWidth(rim)
+        ctx.strokeEllipse(in: circle.insetBy(dx: rim / 2, dy: rim / 2))
+        ctx.setStrokeColor(NSColor.black.withAlphaComponent(0.18).cgColor)
+        ctx.setLineWidth(max(0.75, rim * 0.12))
+        ctx.strokeEllipse(in: circle)
     }
 
     /// Liquid-glass material: the screenshot behind shows through frosted and tinted,
@@ -227,7 +297,7 @@ enum Renderer {
         let r = a.width
         let fg = counterForeground(a.color)
         let sh = NSShadow()
-        sh.shadowColor = NSColor.black.withAlphaComponent(fg == .white ? 0.28 : 0)
+        sh.shadowColor = NSColor.black.withAlphaComponent(0)
         sh.shadowOffset = NSSize(width: 0, height: -max(0.5, r * 0.04))
         sh.shadowBlurRadius = r * 0.08
         let s = NSAttributedString(string: a.text, attributes: [.font: counterLabelFont(r), .foregroundColor: fg, .shadow: sh])
@@ -355,6 +425,9 @@ enum Renderer {
             return b
         case .rect, .oval, .blur, .spotlight:
             return a.rect.insetBy(dx: -a.width / 2, dy: -a.width / 2)
+        case .magnifier:
+            let R = hypot(a.end.x - a.start.x, a.end.y - a.start.y)
+            return CGRect(x: a.start.x - R, y: a.start.y - R, width: R * 2, height: R * 2)
         }
     }
 
