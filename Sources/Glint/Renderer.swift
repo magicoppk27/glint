@@ -127,33 +127,14 @@ enum Renderer {
                 ctx.setFillColor(c); ctx.setStrokeColor(c); ctx.setLineWidth(r * 0.1)
                 ctx.drawPath(using: .fillStroke)
             }
-            // Label: a glossy pill tucked behind the badge so both read as one tag.
+            // Label: a frosted-glass pill tucked behind the badge so both read as one tag.
             if a.id != m.editingLabelID, let (label, pill, origin) = counterLabel(a) {
                 let path = CGPath(roundedRect: pill, cornerWidth: pill.height / 2, cornerHeight: pill.height / 2, transform: nil)
-                ctx.saveGState()
-                softShadow(ctx, m, k, alpha: 0.28)
-                ctx.addPath(path); ctx.setFillColor(c); ctx.fillPath()
-                ctx.restoreGState()
-                fillGlossy(ctx, path, a.color, pill)
-                ctx.addPath(CGPath(roundedRect: pill.insetBy(dx: 0.5, dy: 0.5), cornerWidth: pill.height / 2, cornerHeight: pill.height / 2, transform: nil))
-                ctx.setStrokeColor(NSColor.white.withAlphaComponent(0.22).cgColor); ctx.setLineWidth(max(1, r * 0.05)); ctx.strokePath()
+                drawGlass(ctx, m, k, path: path, bounds: pill, color: a.color)
                 withFlippedNSContext(ctx) { label.draw(at: origin) }
             }
-            // Badge: glossy gradient disc, soft highlight, crisp thin ring.
-            let disc = CGPath(ellipseIn: circle, transform: nil)
-            ctx.saveGState()
-            ctx.setShadow(offset: CGSize(width: 0, height: -1.5 * m.scale * k), blur: 5 * m.scale * k, color: NSColor.black.withAlphaComponent(0.38).cgColor)
-            ctx.addPath(disc); ctx.setFillColor(c); ctx.fillPath()
-            ctx.restoreGState()
-            fillGlossy(ctx, disc, a.color, circle)
-            ctx.saveGState()
-            ctx.addPath(disc); ctx.clip()
-            ctx.setFillColor(NSColor.white.withAlphaComponent(0.2).cgColor)
-            ctx.fillEllipse(in: CGRect(x: a.start.x - r * 0.7, y: a.start.y - r * 0.92, width: r * 1.4, height: r * 0.86))
-            ctx.restoreGState()
-            let ring = max(1.5, r * 0.1)
-            ctx.setStrokeColor(NSColor.white.cgColor); ctx.setLineWidth(ring)
-            ctx.strokeEllipse(in: circle.insetBy(dx: ring / 2, dy: ring / 2))
+            // Badge: a frosted-glass disc on top.
+            drawGlass(ctx, m, k, path: CGPath(ellipseIn: circle, transform: nil), bounds: circle, color: a.color)
             let fg = counterForeground(a.color)
             let numShadow = NSShadow()
             numShadow.shadowColor = NSColor.black.withAlphaComponent(fg == .white ? 0.25 : 0)
@@ -188,6 +169,48 @@ enum Renderer {
         return (f >= 0 ? s.blended(withFraction: f, of: .white) : s.blended(withFraction: -f, of: .black)) ?? s
     }
 
+    /// Liquid-glass material: the screenshot behind shows through frosted and tinted,
+    /// with a bright rim light on top, a softer one at the bottom and a floating shadow.
+    static func drawGlass(_ ctx: CGContext, _ m: EditorModel, _ k: CGFloat, path: CGPath, bounds b: CGRect, color: NSColor) {
+        let sRGB = CGColorSpace(name: CGColorSpace.sRGB)
+        // Floating shadow
+        ctx.saveGState()
+        ctx.setShadow(offset: CGSize(width: 0, height: -2 * m.scale * k), blur: 9 * m.scale * k, color: NSColor.black.withAlphaComponent(0.3).cgColor)
+        ctx.addPath(path); ctx.setFillColor(shade(color, -0.1).cgColor); ctx.fillPath()
+        ctx.restoreGState()
+
+        ctx.saveGState()
+        ctx.addPath(path); ctx.clip()
+        // Frosted backdrop: a blurred copy of what's underneath
+        ctx.setFillColor(shade(color, 0.25).cgColor); ctx.fill(b)
+        if let (img, rr) = m.blurred(b.insetBy(dx: -b.height * 0.4, dy: -b.height * 0.4)) { drawImage(ctx, img, in: rr) }
+        // Color tint
+        if let tint = CGGradient(colorsSpace: sRGB, colors: [color.withAlphaComponent(0.74).cgColor, shade(color, -0.12).withAlphaComponent(0.86).cgColor] as CFArray, locations: [0, 1]) {
+            ctx.drawLinearGradient(tint, start: CGPoint(x: b.midX, y: b.minY), end: CGPoint(x: b.midX, y: b.maxY), options: [])
+        }
+        // Sheen: light pooled at the top, a faint glow near the bottom
+        if let g = CGGradient(colorsSpace: sRGB, colors: [NSColor.white.withAlphaComponent(0.34).cgColor, NSColor.white.withAlphaComponent(0.06).cgColor,
+                                                         NSColor.white.withAlphaComponent(0).cgColor, NSColor.white.withAlphaComponent(0.14).cgColor] as CFArray,
+                              locations: [0, 0.48, 0.62, 1]) {
+            ctx.drawLinearGradient(g, start: CGPoint(x: b.midX, y: b.minY), end: CGPoint(x: b.midX, y: b.maxY), options: [])
+        }
+        // Rim light just inside the edge: bright top, dim sides, soft bottom
+        let rimW = max(1.2, b.height * 0.075)
+        ctx.addPath(path.copy(strokingWithWidth: rimW, lineCap: .round, lineJoin: .round, miterLimit: 10))
+        ctx.clip()
+        if let g = CGGradient(colorsSpace: sRGB, colors: [NSColor.white.withAlphaComponent(0.95).cgColor, NSColor.white.withAlphaComponent(0.15).cgColor,
+                                                         NSColor.white.withAlphaComponent(0.55).cgColor] as CFArray,
+                              locations: [0, 0.5, 1]) {
+            ctx.drawLinearGradient(g, start: CGPoint(x: b.midX, y: b.minY), end: CGPoint(x: b.midX, y: b.maxY), options: [])
+        }
+        ctx.restoreGState()
+        // Hairline so the glass keeps its edge on light backgrounds
+        ctx.addPath(path)
+        ctx.setStrokeColor(NSColor.black.withAlphaComponent(0.16).cgColor)
+        ctx.setLineWidth(max(0.75, b.height * 0.018))
+        ctx.strokePath()
+    }
+
     /// Fills a shape with a soft top-to-bottom gradient of `color` (lighter on top).
     static func fillGlossy(_ ctx: CGContext, _ path: CGPath, _ color: NSColor, _ bounds: CGRect) {
         let colors = [shade(color, 0.24).cgColor, color.cgColor, shade(color, -0.14).cgColor] as CFArray
@@ -202,7 +225,12 @@ enum Renderer {
     static func counterLabel(_ a: Annotation) -> (NSAttributedString, CGRect, CGPoint)? {
         guard !a.text.isEmpty else { return nil }
         let r = a.width
-        let s = NSAttributedString(string: a.text, attributes: [.font: counterLabelFont(r), .foregroundColor: counterForeground(a.color)])
+        let fg = counterForeground(a.color)
+        let sh = NSShadow()
+        sh.shadowColor = NSColor.black.withAlphaComponent(fg == .white ? 0.28 : 0)
+        sh.shadowOffset = NSSize(width: 0, height: -max(0.5, r * 0.04))
+        sh.shadowBlurRadius = r * 0.08
+        let s = NSAttributedString(string: a.text, attributes: [.font: counterLabelFont(r), .foregroundColor: fg, .shadow: sh])
         let sz = s.size()
         let h = counterLabelHeight(r)
         let textX = a.start.x + r * 1.42
