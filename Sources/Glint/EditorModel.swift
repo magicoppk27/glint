@@ -268,10 +268,21 @@ final class EditorModel: ObservableObject {
 
     func render() -> CGImage? { Renderer.render(self) }
 
+    /// Set by the window controller.
+    var closeEditor: (() -> Void)?
+
     func copy() {
         guard let img = render() else { return }
         ImageStore.copy(img, scale: scale)
         Toast.show("Copied to clipboard")
+    }
+
+    /// Copy, then get the editor out of the way so you can paste anywhere.
+    func copyAndClose() {
+        guard let img = render() else { return }
+        ImageStore.copy(img, scale: scale)
+        Toast.show("Copied — paste anywhere")
+        closeEditor?()
     }
 
     func save() {

@@ -28,12 +28,13 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate {
         win.titleVisibility = .hidden
         win.title = "Glint Editor"
         win.isReleasedWhenClosed = false
-        win.minSize = CGSize(width: 780, height: 520)
+        win.minSize = CGSize(width: 820, height: 520)
         win.backgroundColor = .underPageBackgroundColor
         win.contentView = NSHostingView(rootView: EditorView(model: model))
         win.center()
         super.init(window: win)
         win.delegate = self
+        model.closeEditor = { [weak win] in win?.close() }
     }
     required init?(coder: NSCoder) { fatalError() }
 
@@ -52,11 +53,10 @@ struct EditorView: View {
             CanvasRepresentable(model: model)
 
             // Top row: style controls + actions
-            HStack(spacing: 10) {
-                StylePill(model: model)
-                ColorReadout(hover: model.hover)
-                Spacer(minLength: 8)
-                ActionsPill(model: model)
+            ViewThatFits(in: .horizontal) {
+                topRow(readout: true, compact: false)
+                topRow(readout: false, compact: false)
+                topRow(readout: false, compact: true)
             }
             .padding(.leading, CanvasInsets.left)
             .padding(.trailing, 16)
@@ -100,6 +100,17 @@ struct EditorView: View {
         }
         .ignoresSafeArea()
         .focusEffectDisabled()
+    }
+}
+
+extension EditorView {
+    func topRow(readout: Bool, compact: Bool) -> some View {
+        HStack(spacing: 10) {
+            StylePill(model: model).fixedSize()
+            if readout { ColorReadout(hover: model.hover).fixedSize() }
+            Spacer(minLength: 8)
+            ActionsPill(model: model, compact: compact).fixedSize()
+        }
     }
 }
 
@@ -273,6 +284,7 @@ struct LabeledSlider: View {
 
 struct ActionsPill: View {
     @ObservedObject var model: EditorModel
+    var compact = false
     @Environment(\.controlActiveState) private var active
 
     var body: some View {
@@ -296,13 +308,17 @@ struct ActionsPill: View {
                         .keyboardShortcut("s", modifiers: [.command, .shift])
                 }
             }
-            DragHandle(model: model)
-            Button { model.copy() } label: {
-                Label("Copy", systemImage: "doc.on.doc.fill")
+            DragHandle(model: model, compact: compact)
+            Button { model.copyAndClose() } label: {
+                if compact {
+                    Image(systemName: "doc.on.doc.fill")
+                } else {
+                    Label("Copy", systemImage: "doc.on.doc.fill").lineLimit(1)
+                }
             }
             .buttonStyle(PillButtonStyle(prominent: true))
             .keyboardShortcut("c", modifiers: .command)
-            .help("Copy to clipboard  ⌘C")
+            .help("Copy to clipboard and close  ⌘C")
         }
     }
 }
@@ -310,14 +326,18 @@ struct ActionsPill: View {
 /// Drag this into any app (Slack, Mail, Figma, Finder…) to drop the annotated image.
 struct DragHandle: View {
     @ObservedObject var model: EditorModel
+    var compact = false
     @State private var hover = false
 
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: "hand.draw.fill")
                 .font(.system(size: 13, weight: .semibold))
-            Text("Drag")
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
+            if !compact {
+                Text("Drag")
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .lineLimit(1)
+            }
         }
         .padding(.horizontal, 13)
         .frame(height: 40)

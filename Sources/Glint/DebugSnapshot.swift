@@ -102,6 +102,9 @@ enum DebugSnapshot {
             ]
             m.hover.color = m.color(at: CGPoint(x: w * 0.5, y: h * 0.5))
             m.backdrop.enabled = ProcessInfo.processInfo.environment["GLINT_BACKDROP"] != nil
+            if let ws = ProcessInfo.processInfo.environment["GLINT_EDITOR_WIDTH"], let wv = Double(ws), let win = wc.window {
+                var f = win.frame; f.size.width = CGFloat(wv); win.setFrame(f, display: true)
+            }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                 if let win = wc.window { save(win, "\(dir)/editor.png") }
                 if let img = m.render() { try? ImageStore.write(img, scale: m.scale, to: URL(fileURLWithPath: "\(dir)/export.png")) }
