@@ -126,6 +126,7 @@ enum DebugSnapshot {
                 Annotation(kind: .measure, start: CGPoint(x: w * 0.1, y: h * 0.95), end: CGPoint(x: w * 0.5, y: h * 0.95), color: palette[3], width: m.strokeWidth),
             ]
             m.hover.color = m.color(at: CGPoint(x: w * 0.5, y: h * 0.5))
+            m.showCopiedBadge = true
             m.backdrop.enabled = ProcessInfo.processInfo.environment["GLINT_BACKDROP"] != nil
             if let ws = ProcessInfo.processInfo.environment["GLINT_EDITOR_WIDTH"], let wv = Double(ws), let win = wc.window {
                 var f = win.frame; f.size.width = CGFloat(wv); win.setFrame(f, display: true)

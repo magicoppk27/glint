@@ -147,6 +147,8 @@ final class EditorModel: ObservableObject {
     @Published var pendingCrop: CGRect?
     @Published var backdrop = Backdrop()
     @Published var selectedID: UUID?
+    /// Shown briefly when the capture was already copied, so you know you can just paste.
+    @Published var showCopiedBadge = false
 
     private struct Snapshot { var annotations: [Annotation]; var crop: CGRect? }
     private var undoStack: [Snapshot] = []

@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import ScreenCaptureKit
 import UniformTypeIdentifiers
 
@@ -181,7 +182,12 @@ final class AppController {
         }
         if Prefs.autoCopy { ImageStore.copy(img, scale: s) }
         switch Prefs.afterCapture {
-        case "editor": EditorWindowController.show(shot)
+        case "editor":
+            EditorWindowController.show(shot)
+            if Prefs.autoCopy, let m = EditorWindowController.open.last?.model {
+                m.showCopiedBadge = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 4) { withAnimation(.easeOut(duration: 0.4)) { m.showCopiedBadge = false } }
+            }
         case "nothing": Toast.show(Prefs.autoCopy ? "Copied to clipboard" : "Captured", symbol: "checkmark.circle.fill")
         default: ThumbnailController.show(shot)
         }

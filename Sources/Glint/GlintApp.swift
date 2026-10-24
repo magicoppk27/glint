@@ -164,6 +164,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let dir = ProcessInfo.processInfo.environment["GLINT_SNAPSHOT"] { DebugSnapshot.run(into: dir) }
         if let dir = ProcessInfo.processInfo.environment["GLINT_STITCH_TEST"] { DebugSnapshot.stitchTest(into: dir) }
         if ProcessInfo.processInfo.environment["GLINT_HOTKEY_TEST"] != nil { DebugSnapshot.hotkeyTest() }
+        // GLINT_DELIVER_TEST=<png>: run an image through the normal after-capture pipeline.
+        if let path = ProcessInfo.processInfo.environment["GLINT_DELIVER_TEST"], let shot = ImageStore.load(url: URL(fileURLWithPath: path)) {
+            AppController.shared.deliver(shot.image, scale: shot.scale)
+        }
         // GLINT_PERMCHECK=1: print whether macOS still recognises this build's permission grants.
         if ProcessInfo.processInfo.environment["GLINT_PERMCHECK"] != nil {
             print("PERMCHECK screenRecording=\(CGPreflightScreenCaptureAccess()) accessibility=\(AXIsProcessTrusted())")

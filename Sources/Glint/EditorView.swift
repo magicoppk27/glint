@@ -87,15 +87,25 @@ struct EditorView: View {
             .allowsHitTesting(model.pendingCrop != nil || model.crop != nil)
 
             // Title (non-interactive, sits in the titlebar)
-            HStack {
+            HStack(spacing: 10) {
                 Spacer()
                 Text("\(Int(model.outputSize.width)) × \(Int(model.outputSize.height))")
                     .font(.system(size: 12, weight: .medium, design: .rounded))
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
+                if model.showCopiedBadge {
+                    Label("Copied — just paste", systemImage: "checkmark.circle.fill")
+                        .font(.system(size: 11.5, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 9)
+                        .frame(height: 20)
+                        .background(Capsule().fill(LinearGradient(colors: [Color(hex: 0x7C5CFF), Color(hex: 0xC145F5)], startPoint: .topLeading, endPoint: .bottomTrailing)))
+                        .shadow(color: Color(hex: 0x7C5CFF).opacity(0.4), radius: 5, y: 2)
+                        .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                }
                 Spacer()
             }
-            .padding(.top, 8)
+            .padding(.top, 6)
             .allowsHitTesting(false)
         }
         .ignoresSafeArea()
