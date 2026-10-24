@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import ApplicationServices
 import Carbon.HIToolbox
 
 @main
@@ -163,6 +164,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let dir = ProcessInfo.processInfo.environment["GLINT_SNAPSHOT"] { DebugSnapshot.run(into: dir) }
         if let dir = ProcessInfo.processInfo.environment["GLINT_STITCH_TEST"] { DebugSnapshot.stitchTest(into: dir) }
         if ProcessInfo.processInfo.environment["GLINT_HOTKEY_TEST"] != nil { DebugSnapshot.hotkeyTest() }
+        // GLINT_PERMCHECK=1: print whether macOS still recognises this build's permission grants.
+        if ProcessInfo.processInfo.environment["GLINT_PERMCHECK"] != nil {
+            print("PERMCHECK screenRecording=\(CGPreflightScreenCaptureAccess()) accessibility=\(AXIsProcessTrusted())")
+            NSApp.terminate(nil)
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }

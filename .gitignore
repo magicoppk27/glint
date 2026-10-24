@@ -1,3 +1,29 @@
+# Build output
 .build/
 build/
+dist/
+DerivedData/
+node_modules/
+*.xcuserstate
+
+# Signing material — never commit (back up .signing/ separately)
 .signing/
+*.keychain-db
+*.keychain
+*.p12
+*.pem
+*.key
+*.cer
+*.mobileprovision
+*.provisionprofile
+keychain-password
+
+# Secrets
+.env
+.env.*
+*.token
+
+# Claude Code worktrees
+.claude/worktrees/
+
+.DS_Store
