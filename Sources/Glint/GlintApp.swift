@@ -69,8 +69,29 @@ struct OpenHomeButton: View {
     @Environment(\.openWindow) private var openWindow
     var body: some View {
         Button("Open Glint") {
-            openWindow(id: "home")
-            NSApp.activate(ignoringOtherApps: true)
+            HomeWindow.openAction = HomeWindow.openAction ?? openWindow
+            HomeWindow.show()
+        }
+    }
+}
+
+/// Brings the main window back from anywhere (Dock click, menu bar), even after it was closed.
+/// SwiftUI's own reopen skips this whenever any other Glint window exists (e.g. the menu bar item).
+@MainActor
+enum HomeWindow {
+    static var openAction: OpenWindowAction?
+
+    static var window: NSWindow? {
+        NSApp.windows.first { $0.title == "Glint" && $0.identifier != GlintChrome.id && !($0 is NSPanel) }
+    }
+
+    static func show() {
+        NSApp.activate(ignoringOtherApps: true)
+        if let w = window {
+            if w.isMiniaturized { w.deminiaturize(nil) }
+            w.makeKeyAndOrderFront(nil)
+        } else {
+            openAction?(id: "home")
         }
     }
 }
@@ -164,6 +185,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let dir = ProcessInfo.processInfo.environment["GLINT_SNAPSHOT"] { DebugSnapshot.run(into: dir) }
         if let dir = ProcessInfo.processInfo.environment["GLINT_STITCH_TEST"] { DebugSnapshot.stitchTest(into: dir) }
         if ProcessInfo.processInfo.environment["GLINT_HOTKEY_TEST"] != nil { DebugSnapshot.hotkeyTest() }
+        // GLINT_CLOSE_HOME=1: close the home window shortly after launch (reopen testing).
+        if ProcessInfo.processInfo.environment["GLINT_CLOSE_HOME"] != nil {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                NSApp.windows.first { $0.title == "Glint" && $0.isVisible }?.performClose(nil)
+            }
+        }
         // GLINT_DELIVER_TEST=<png>: run an image through the normal after-capture pipeline.
         if let path = ProcessInfo.processInfo.environment["GLINT_DELIVER_TEST"], let shot = ImageStore.load(url: URL(fileURLWithPath: path)) {
             AppController.shared.deliver(shot.image, scale: shot.scale)
@@ -176,6 +203,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
+    /// Dock icon click: always bring the main window back if it isn't showing.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if HomeWindow.window?.isVisible != true { HomeWindow.show() }
+        return false
+    }
 
     func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls { AppController.shared.openImage(url: url) }

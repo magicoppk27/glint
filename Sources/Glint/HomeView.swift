@@ -96,6 +96,7 @@ enum ThumbCache {
 
 struct HomeView: View {
     @EnvironmentObject var library: Library
+    @Environment(\.openWindow) private var openWindow
     @State private var hasPermission = CGPreflightScreenCaptureAccess()
     @State private var filter: RecentFilter = .all
     @State private var selecting = false
@@ -151,7 +152,10 @@ struct HomeView: View {
             }
         }
         .focusEffectDisabled()
-        .onAppear { library.reload() }
+        .onAppear {
+            library.reload()
+            HomeWindow.openAction = openWindow // lets the Dock icon reopen this window later
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             hasPermission = CGPreflightScreenCaptureAccess()
             library.reload()
