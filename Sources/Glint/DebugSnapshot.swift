@@ -31,13 +31,35 @@ enum DebugSnapshot {
             f.fill(CGRect(x: 0, y: frameH - header, width: W, height: header))
             return f.makeImage()!
         }
+        let horizontalMode = ProcessInfo.processInfo.environment["GLINT_STITCH_H"] != nil
+        if horizontalMode {
+            // Orientation check: a red pixel on the right edge must end up on the bottom row.
+            let t = CGContext(data: nil, width: 2, height: 1, bitsPerComponent: 8, bytesPerRow: 0, space: cs, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+            t.setFillColor(NSColor.white.cgColor); t.fill(CGRect(x: 0, y: 0, width: 2, height: 1))
+            t.setFillColor(NSColor.red.cgColor); t.fill(CGRect(x: 1, y: 0, width: 1, height: 1))
+            let rot = rotateQuarter(t.makeImage()!, clockwise: true)!
+            let rep = NSBitmapImageRep(cgImage: rot)
+            print("STITCH-H orientation rightEdgeToBottom=\((rep.colorAt(x: 0, y: 1)?.redComponent ?? 0) > 0.9 && (rep.colorAt(x: 0, y: 1)?.greenComponent ?? 1) < 0.1)")
+        }
         Task {
             let st = Stitcher()
             var off = 0
             var offsets: [Int] = []
             while off + frameH <= H { offsets.append(off); off += [97, 120, 0, 143, 61][offsets.count % 5] }
-            for o in offsets { _ = await st.add(frame(at: o)) }
-            let img = await st.compose()
+            var img: CGImage?
+            var page = page
+            if horizontalMode {
+                // Same content turned sideways: fixed column on the left, new content arriving on the right.
+                for o in offsets { _ = await st.add(rotateQuarter(rotateQuarter(frame(at: o), clockwise: false)!, clockwise: true)!) }
+                img = await st.compose().flatMap { rotateQuarter($0, clockwise: false) }
+                page = rotateQuarter(page, clockwise: false)!
+                if let i = img, let back = rotateQuarter(i, clockwise: true) { img = back }
+                page = rotateQuarter(page, clockwise: true)!
+                print("STITCH-H wideOutput=\((await st.compose().flatMap { rotateQuarter($0, clockwise: false) }).map { "\($0.width)x\($0.height)" } ?? "nil")")
+            } else {
+                for o in offsets { _ = await st.add(frame(at: o)) }
+                img = await st.compose()
+            }
             let expected = frameH + offsets.last!
             print("STITCH frames=\(offsets.count) height=\(img?.height ?? -1) expected=\(expected) \(img?.height == expected ? "PASS" : "FAIL")")
             if let img, img.height == expected {

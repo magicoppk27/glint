@@ -32,14 +32,21 @@ final class CaptureService {
         try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
     }
 
-    /// Captures each screen as it looks right now (minus Glint's own windows).
+    /// Glint's transient helper windows (overlay, toasts, HUDs, picker) — never part of a screenshot.
+    /// Its real windows (home, editor, pins) are captured like any other app's.
+    static func chromeWindows(in content: SCShareableContent) -> [SCWindow] {
+        let ids = Set(NSApp.windows.filter { $0.identifier == GlintChrome.id }.map { CGWindowID($0.windowNumber) })
+        return content.windows.filter { ids.contains($0.windowID) }
+    }
+
+    /// Captures each screen as it looks right now (Glint's helper windows left out).
     func freeze(_ screens: [NSScreen]) async throws -> [Frozen] {
         let content = try await content()
-        let me = content.applications.filter { $0.processID == ProcessInfo.processInfo.processIdentifier }
+        let chrome = Self.chromeWindows(in: content)
         var out: [Frozen] = []
         for screen in screens {
             guard let id = screen.displayID, let display = content.displays.first(where: { $0.displayID == id }) else { continue }
-            let filter = SCContentFilter(display: display, excludingApplications: me, exceptingWindows: [])
+            let filter = SCContentFilter(display: display, excludingWindows: chrome)
             let cfg = SCStreamConfiguration()
             let scale = screen.backingScaleFactor
             cfg.width = Int(screen.frame.width * scale)
@@ -71,12 +78,12 @@ final class CaptureService {
     /// On-screen app windows, front to back.
     func windowsFrontToBack() -> [WinInfo] {
         let raw = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
-        let myPID = ProcessInfo.processInfo.processIdentifier
+        let chrome = Set(NSApp.windows.filter { $0.identifier == GlintChrome.id }.map { UInt32($0.windowNumber) })
         let primaryH = NSScreen.screens.first?.frame.height ?? 0
         return raw.compactMap { d in
             guard (d[kCGWindowLayer as String] as? Int) == 0,
-                  let pid = d[kCGWindowOwnerPID as String] as? Int32, pid != myPID,
-                  let num = d[kCGWindowNumber as String] as? UInt32,
+                  d[kCGWindowOwnerPID as String] as? Int32 != nil,
+                  let num = d[kCGWindowNumber as String] as? UInt32, !chrome.contains(num),
                   let bd = d[kCGWindowBounds as String] as? NSDictionary,
                   let r = CGRect(dictionaryRepresentation: bd),
                   (d[kCGWindowAlpha as String] as? Double ?? 1) > 0.01,

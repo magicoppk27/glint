@@ -111,6 +111,7 @@ enum ClipboardPicker {
         model.selected = 0
         let size = CGSize(width: 400, height: min(CGFloat(items.count) * 46 + 64, 560))
         let p = PickerPanel(contentRect: CGRect(origin: .zero, size: size), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        p.identifier = GlintChrome.id
         p.isOpaque = false
         p.backgroundColor = .clear
         p.hasShadow = true

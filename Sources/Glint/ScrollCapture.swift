@@ -4,20 +4,22 @@ import ScreenCaptureKit
 import SwiftUI
 
 /// Scrolling capture: grabs the selected region repeatedly while the content scrolls
-/// (automatically, or by the user) and stitches the frames into one tall image.
+/// (automatically, or by the user) and stitches the frames into one tall — or wide — image.
+/// Horizontal mode rotates each frame a quarter turn so the same vertical stitcher does the work.
 @MainActor
 final class ScrollSession: ObservableObject {
     static var active: ScrollSession?
 
-    @Published var heightPx = 0
+    @Published var heightPx = 0 // length along the scroll direction
     @Published var autoScroll = false
     @Published var paused = false
+    @Published private(set) var horizontal = Prefs.d.bool(forKey: "scrollHorizontal")
 
     private let screen: NSScreen
     private let local: CGRect // region, screen-local points (bottom-left)
     private let global: CGRect // region, Cocoa global points
     private let scale: CGFloat
-    private let stitcher: Stitcher
+    private var stitcher: Stitcher
     private var filter: SCContentFilter?
     private var border: NSPanel?
     private var hud: NSPanel?
@@ -48,8 +50,7 @@ final class ScrollSession: ObservableObject {
         do {
             let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
             guard let id = screen.displayID, let display = content.displays.first(where: { $0.displayID == id }) else { throw CaptureError.noDisplay }
-            let me = content.applications.filter { $0.processID == ProcessInfo.processInfo.processIdentifier }
-            filter = SCContentFilter(display: display, excludingApplications: me, exceptingWindows: [])
+            filter = SCContentFilter(display: display, excludingWindows: CaptureService.chromeWindows(in: content))
         } catch {
             Toast.show(error.localizedDescription, symbol: "exclamationmark.triangle.fill")
             teardown(); return
@@ -61,8 +62,12 @@ final class ScrollSession: ObservableObject {
         }
         lastGrowth = Date()
         while running {
-            if let frame = await grab() {
-                let h = await stitcher.add(frame)
+            if var frame = await grab() {
+                let st = stitcher, wasHorizontal = horizontal
+                if wasHorizontal, let r = rotateQuarter(frame, clockwise: true) { frame = r }
+                let h = await st.add(frame)
+                // Ignore a result from before a direction switch.
+                guard st === stitcher, wasHorizontal == horizontal else { continue }
                 if h > heightPx { heightPx = h; lastGrowth = Date() }
                 if heightPx >= maxHeightPx { finish(); break }
             }
@@ -83,6 +88,16 @@ final class ScrollSession: ObservableObject {
         return try? await SCScreenshotManager.captureImage(contentFilter: filter, configuration: cfg)
     }
 
+    /// Switching direction starts the stitch over from what's on screen now.
+    func setHorizontal(_ h: Bool) {
+        guard h != horizontal, running else { return }
+        horizontal = h
+        Prefs.d.set(h, forKey: "scrollHorizontal")
+        stitcher = Stitcher()
+        heightPx = 0
+        lastGrowth = Date()
+    }
+
     // MARK: Auto-scroll
 
     private func startScrolling() {
@@ -96,7 +111,9 @@ final class ScrollSession: ObservableObject {
         let inside = global.contains(NSEvent.mouseLocation)
         paused = !inside
         guard inside, running else { lastGrowth = Date(); return }
-        let e = CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: -6, wheel2: 0, wheel3: 0)
+        let e = horizontal
+            ? CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 2, wheel1: 0, wheel2: -6, wheel3: 0)
+            : CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: -6, wheel2: 0, wheel3: 0)
         e?.location = cgPoint(NSEvent.mouseLocation)
         e?.post(tap: .cghidEventTap)
     }
@@ -121,7 +138,7 @@ final class ScrollSession: ObservableObject {
         border = b
 
         let host = NSHostingView(rootView: ScrollHUD(session: self))
-        let size = CGSize(width: 440, height: 74)
+        let size = CGSize(width: 520, height: 74)
         let h = makeFloatingPanel(size: size, level: .statusBar)
         host.frame = CGRect(origin: .zero, size: size)
         h.contentView = host
@@ -139,6 +156,8 @@ final class ScrollSession: ObservableObject {
             switch e.keyCode {
             case 36, 76: self.finish(); return nil
             case 53: self.cancel(); return nil
+            case 123, 124: self.setHorizontal(true); return nil // ← →
+            case 125, 126: self.setHorizontal(false); return nil // ↑ ↓
             default: return e
             }
         }
@@ -151,10 +170,12 @@ final class ScrollSession: ObservableObject {
         guard running else { return }
         running = false
         teardown()
+        let wide = horizontal
         Task {
-            guard let img = await stitcher.compose() else {
+            guard var img = await stitcher.compose() else {
                 Toast.show("Nothing captured — try scrolling a scrollable area", symbol: "exclamationmark.triangle.fill"); return
             }
+            if wide, let r = rotateQuarter(img, clockwise: false) { img = r }
             AppController.shared.deliver(img, scale: scale)
         }
     }
@@ -183,17 +204,18 @@ struct ScrollHUD: View {
         HStack(spacing: 12) {
             ZStack {
                 Circle().fill(Color(hex: 0x8B5CF6).opacity(0.25)).frame(width: 34, height: 34)
-                Image(systemName: session.paused ? "pause.fill" : "arrow.down")
+                Image(systemName: session.paused ? "pause.fill" : (session.horizontal ? "arrow.right" : "arrow.down"))
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(Color(hex: 0xC4B5FD))
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.system(size: 13, weight: .semibold, design: .rounded))
-                Text("\(session.pointHeight) pt tall  ·  ⏎ done  ·  esc cancel")
+                Text("\(session.pointHeight) pt \(session.horizontal ? "wide" : "tall")  ·  ⏎ done  ·  esc cancel")
                     .font(.system(size: 11).monospacedDigit())
                     .foregroundStyle(.white.opacity(0.65))
             }
             Spacer(minLength: 4)
+            DirectionSwitch(session: session)
             Button("Cancel") { session.cancel() }
                 .buttonStyle(HUDButton(prominent: false))
             Button("Done") { session.finish() }
@@ -201,16 +223,62 @@ struct ScrollHUD: View {
         }
         .foregroundStyle(.white)
         .padding(.horizontal, 14)
-        .frame(width: 420, height: 56)
+        .frame(width: 500, height: 56)
         .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.black.opacity(0.85)))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(.white.opacity(0.12)))
-        .frame(width: 440, height: 74)
+        .frame(width: 520, height: 74)
     }
 
     private var title: String {
         if !session.autoScroll { return "Scroll the content yourself" }
         return session.paused ? "Paused — move back into the area to scroll" : "Scrolling… stop whenever you like"
     }
+}
+
+/// ↓ / → toggle for the scroll direction (arrow keys work too).
+struct DirectionSwitch: View {
+    @ObservedObject var session: ScrollSession
+    var body: some View {
+        HStack(spacing: 2) {
+            seg("arrow.down", "Scroll down  (↓)", !session.horizontal) { session.setHorizontal(false) }
+            seg("arrow.right", "Scroll right  (→)", session.horizontal) { session.setHorizontal(true) }
+        }
+        .padding(2)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.white.opacity(0.1)))
+    }
+
+    private func seg(_ symbol: String, _ help: String, _ on: Bool, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 12, weight: .bold))
+                .frame(width: 30, height: 26)
+                .foregroundStyle(on ? Color.white : Color.white.opacity(0.55))
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(on ? AnyShapeStyle(LinearGradient(colors: [Color(hex: 0x7C5CFF), Color(hex: 0xC145F5)], startPoint: .topLeading, endPoint: .bottomTrailing)) : AnyShapeStyle(Color.clear)))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
+    }
+}
+
+/// Quarter-turn rotation. Clockwise moves the right edge to the bottom, so sideways
+/// scrolling (content moving left) becomes ordinary downward scrolling (content moving up).
+func rotateQuarter(_ img: CGImage, clockwise: Bool) -> CGImage? {
+    let w = img.width, h = img.height
+    let cs = img.colorSpace ?? CGColorSpace(name: CGColorSpace.sRGB)!
+    guard let ctx = CGContext(data: nil, width: h, height: w, bitsPerComponent: 8, bytesPerRow: 0, space: cs,
+                              bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+    if clockwise {
+        ctx.translateBy(x: 0, y: CGFloat(w))
+        ctx.rotate(by: -.pi / 2)
+    } else {
+        ctx.translateBy(x: CGFloat(h), y: 0)
+        ctx.rotate(by: .pi / 2)
+    }
+    ctx.interpolationQuality = .none
+    ctx.draw(img, in: CGRect(x: 0, y: 0, width: w, height: h))
+    return ctx.makeImage()
 }
 
 struct HUDButton: ButtonStyle {

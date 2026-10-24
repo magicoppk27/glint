@@ -39,6 +39,7 @@ final class SelectionOverlay {
     private func show(_ frozen: [Frozen]) {
         for f in frozen {
             let w = OverlayWindow(contentRect: f.screen.frame, styleMask: .borderless, backing: .buffered, defer: false)
+            w.identifier = GlintChrome.id
             w.level = .screenSaver
             w.isOpaque = true
             w.backgroundColor = .black

@@ -4,9 +4,15 @@ import Vision
 
 // MARK: - Floating panel helper
 
+/// Marks Glint's transient helper windows so captures leave them out.
+enum GlintChrome {
+    static let id = NSUserInterfaceItemIdentifier("glint.chrome")
+}
+
 @MainActor
 func makeFloatingPanel(size: CGSize, level: NSWindow.Level = .statusBar) -> NSPanel {
     let p = NSPanel(contentRect: CGRect(origin: .zero, size: size), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+    p.identifier = GlintChrome.id
     p.isOpaque = false
     p.backgroundColor = .clear
     p.hasShadow = false
