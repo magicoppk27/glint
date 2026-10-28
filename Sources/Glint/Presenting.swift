@@ -21,10 +21,10 @@ enum PresentFeature: String, CaseIterable, Identifiable {
 
     var subtitle: String {
         switch self {
-        case .halo: "Halo follows the mouse, flashes on clicks"
-        case .keys: "Shortcuts and typing appear on screen"
-        case .lens: "Live magnifier · tap to toggle, hold to peek"
-        case .draw: "Glint's markup tools, right on the screen"
+        case .halo: "Halo follows the mouse"
+        case .keys: "Shows what you type"
+        case .lens: "Live magnifier · hold to peek"
+        case .draw: "Mark up the live screen"
         }
     }
 
@@ -253,6 +253,7 @@ struct PresentSettings: View {
             } footer: {
                 Text("Shown on screen and in other apps' recordings, never in Glint's own screenshots.")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             Section {
                 PresentToggleRow(feature: .keys)
@@ -268,6 +269,7 @@ struct PresentSettings: View {
             } footer: {
                 Text("Needs Input Monitoring, asked the first time you turn it on. Keys are only displayed, never stored or sent, and macOS hides keys typed into password fields.")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             .onAppear { keysAllowed = Keystrokes.hasPermission }
             Section {
@@ -277,6 +279,7 @@ struct PresentSettings: View {
             } footer: {
                 Text("Uses the editor's tools and keys (A arrow, R box, D draw, N step, Q box + step, S spotlight, 1–8 colors). ⌘Z undo, ⌘⌫ clear, esc or right-click to stop. The hand button lets clicks through to the apps underneath; the camera opens a screenshot with your drawing in the editor.")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             Section {
                 PresentToggleRow(feature: .lens)
@@ -287,6 +290,7 @@ struct PresentSettings: View {
             } footer: {
                 Text("Tap the shortcut to toggle, or hold it to show the lens only while held. While it shows: ⌃⌥= and ⌃⌥− zoom, esc closes. Uses Screen Recording; nothing is saved.")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .formStyle(.grouped)

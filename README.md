@@ -21,6 +21,7 @@ Or download the installer: **[Glint-arm64.dmg](https://github.com/magicoppk27/gl
 
 - **Screen Recording** (required) — macOS asks the first time you take a screenshot. Allow it, then quit and reopen Glint.
 - **Accessibility** (optional) — auto-scrolling in Scrolling Capture and pasting straight from the clipboard picker.
+- **Input Monitoring** (optional) — only for Show Keystrokes; asked the first time you turn it on. Keys are only displayed, never stored.
 
 Captures are saved to `~/Pictures/Glint`; nothing leaves your Mac.
 
@@ -32,8 +33,22 @@ Captures are saved to `~/Pictures/Glint`; nothing leaves your Mac.
 | ⇧⌘6 Capture window | ⇧⌘0 Scrolling capture |
 | ⇧⌘8 Copy text from screen | ⇧⌘7 Pick color |
 | ⌃⌘V Clipboard history | |
+| ⌃⌥C Cursor highlight | ⌃⌥K Show keystrokes |
+| ⌃⌥D Draw on screen | ⌃⌥M Zoom lens (tap or hold) |
+| ⌃⌥X Turn off presenting tools | |
 
 All of them can be changed in Settings → Shortcuts.
+
+## Presenting tools
+
+For demos and screen recordings (menu bar → Presenting, the Home window, or Settings → Presenting):
+
+- **Cursor highlight** — a halo around the pointer that flashes red/blue on left/right clicks and dims when the mouse rests.
+- **Show keystrokes** — shortcuts and typing appear as chips near the bottom of the screen and fade after 2 s.
+- **Draw on screen** — the editor's own tools (arrow, box, pen, highlighter, text, steps, Box + Step, spotlight) on the live screen. ⌘Z undo, ⌘⌫ clear, esc or right-click to stop; the hand button passes clicks through, the camera button captures the screen with your drawing into the editor.
+- **Zoom lens** — a live magnifier that follows the pointer. Tap ⌃⌥M to toggle, hold it to peek; ⌃⌥= / ⌃⌥− zoom, esc closes.
+
+The halo, keystrokes and lens never appear in Glint's own screenshots; drawings do.
 
 ## Build from source
 

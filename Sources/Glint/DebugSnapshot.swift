@@ -171,6 +171,10 @@ enum DebugSnapshot {
             w.orderFront(nil)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 save(w, "\(dir)/shortcuts.png")
+                w.setContentSize(CGSize(width: 600, height: 900))
+                w.contentView = NSHostingView(rootView: PresentSettings().frame(width: 600, height: 900))
+                w.displayIfNeeded()
+                save(w, "\(dir)/presenting.png")
                 print("HOTKEYS failed=\(HotkeyStore.shared.failed.sorted()) " + HotkeyAction.all.map { "\($0.id)=\(HotkeyStore.shared.label($0))" }.joined(separator: " "))
                 w.orderOut(nil)
             }
