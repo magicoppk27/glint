@@ -48,7 +48,7 @@ struct EditorView: View {
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            Color(nsColor: .underPageBackgroundColor)
+            WindowBackdrop(solid: .underPageBackgroundColor)
             DotGrid().opacity(0.5)
             CanvasRepresentable(model: model)
 
@@ -121,6 +121,7 @@ extension EditorView {
             Spacer(minLength: 8)
             ActionsPill(model: model, compact: compact).fixedSize()
         }
+        .glassGroup()
     }
 }
 
@@ -147,9 +148,7 @@ struct Pill<Content: View>: View {
     var body: some View {
         content
             .padding(5)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).strokeBorder(.primary.opacity(0.08)))
-            .shadow(color: .black.opacity(0.12), radius: 10, y: 4)
+            .controlSurface(RoundedRectangle(cornerRadius: 13, style: .continuous))
     }
 }
 
@@ -351,10 +350,9 @@ struct DragHandle: View {
         }
         .padding(.horizontal, 13)
         .frame(height: 40)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+        .controlSurface(RoundedRectangle(cornerRadius: 13, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous)
-            .strokeBorder(hover ? Color.accentColor.opacity(0.6) : Color.primary.opacity(0.08), style: StrokeStyle(lineWidth: 1, dash: hover ? [4, 3] : [])))
-        .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
+            .strokeBorder(Color.accentColor.opacity(hover ? 0.6 : 0), style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
         .contentShape(Rectangle())
         .onHover { h in
             hover = h
@@ -386,26 +384,6 @@ struct ColorReadout: View {
             }
             .help("Color under the cursor. Press Tab to copy hex, Shift-Tab for rgb(), or use the eyedropper (I).")
         }
-    }
-}
-
-struct PillButtonStyle: ButtonStyle {
-    var prominent: Bool
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 13, weight: .semibold, design: .rounded))
-            .padding(.horizontal, 14)
-            .frame(height: 40)
-            .foregroundStyle(prominent ? Color.white : Color.primary)
-            .background(
-                RoundedRectangle(cornerRadius: 13, style: .continuous)
-                    .fill(prominent ? AnyShapeStyle(LinearGradient(colors: [Color(hex: 0x7C5CFF), Color(hex: 0xC145F5)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                          : AnyShapeStyle(.regularMaterial))
-            )
-            .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).strokeBorder(.white.opacity(prominent ? 0.2 : 0.08)))
-            .shadow(color: (prominent ? Color(hex: 0x7C5CFF) : .black).opacity(0.25), radius: 8, y: 3)
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .contentShape(Rectangle())
     }
 }
 

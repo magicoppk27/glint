@@ -81,10 +81,8 @@ struct ToastView: View {
         .foregroundStyle(.white)
         .padding(.horizontal, 18)
         .padding(.vertical, 11)
-        .background(Capsule().fill(Color.black.opacity(0.82)))
-        .overlay(Capsule().strokeBorder(.white.opacity(0.12), lineWidth: 1))
+        .overlaySurface(Capsule())
         .padding(14)
-        .shadow(color: .black.opacity(0.25), radius: 10, y: 4)
     }
 }
 

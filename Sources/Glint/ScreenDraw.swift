@@ -177,12 +177,9 @@ struct DrawToolbar: View {
         }
         .padding(.horizontal, 8)
         .frame(height: 44)
-        .background(.regularMaterial, in: Capsule())
-        .overlay(Capsule().strokeBorder(.primary.opacity(0.1)))
-        .shadow(color: .black.opacity(0.22), radius: 8, y: 3)
+        .overlaySurface(Capsule())
         .padding(10) // room for the shadow
         .fixedSize()
-        .environment(\.colorScheme, .dark)
     }
 
     private var divider: some View { Divider().frame(height: 22).padding(.horizontal, 4) }

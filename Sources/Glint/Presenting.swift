@@ -204,10 +204,9 @@ struct PresentTile: View {
                 }
             }
             .padding(12)
-            .background(RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.primary.opacity(hover ? 0.07 : 0.04)))
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(on ? feature.colors[0].opacity(0.6) : Color.primary.opacity(0.08), lineWidth: on ? 1.5 : 1))
+            .tileSurface(hover: hover)
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(feature.colors[0].opacity(on ? 0.6 : 0), lineWidth: 1.5))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

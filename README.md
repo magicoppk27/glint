@@ -50,6 +50,16 @@ For demos and screen recordings (menu bar → Presenting, the Home window, or Se
 
 The halo, keystrokes and lens never appear in Glint's own screenshots; drawings do.
 
+## Themes
+
+Pick a theme from the palette button on the Home window, the menu bar icon → Theme, View → Theme, or Settings → Appearance:
+
+- **Classic** — frosted materials and soft shadows.
+- **Liquid Glass** — Apple's glass on toolbars and buttons, with a see-through window (macOS 26+).
+- **Glint Glass** — violet-tinted glass with a light rim, on the Home tiles too (macOS 26+).
+
+Settings can be shown as tabs or as a sidebar (Settings → Appearance → Layout).
+
 ## Build from source
 
 Requires the Xcode Command Line Tools (`xcode-select --install`).

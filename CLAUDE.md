@@ -71,6 +71,16 @@ Goal of this file: "clone my glint repo, build and install it" should work in on
   mouse still ≈ 8 context switches/s.
 - Screen Pointer (local.screenpointer.ScreenPointer) uses the same ⌃⌥ defaults — quit it, or both apps fight over the keys.
 
+## Themes (Glass.swift)
+- `GlassLook` (classic, liquid, glint) in UserDefaults `glassLook`; default liquid; macOS < 26 always classic.
+  Surfaces go through `controlSurface`, `overlaySurface`, `tileSurface`, `glassGroup`, `PillButtonStyle` and
+  `WindowBackdrop` (behind-window blur for the glass looks) — don't add `.regularMaterial` backgrounds directly.
+- Pickers: Home `ThemeButton`, `ThemeMenu` in the menu bar extra and View menu, Settings → Appearance (`LookCard`).
+- Settings (`SettingsWindow.swift`): panes General, Appearance, Presenting, Shortcuts, Permissions, About; layout
+  `settingsLayout` = tabs | sidebar; last pane in `settingsPane`. Permissions pane rechecks every 1.5 s while open.
+- Real-pixel design review: `open -W -n --env GLINT_DESIGN=/tmp/d /Applications/Glint.app` saves Home, editor, draw
+  toolbar, toast (each look, light/dark) and Settings (both layouts). Glass only shows in real screen captures.
+
 ## Gotchas already solved
 - Area capture is drag-only; Window mode picks windows. Captures include Glint's own windows; transient helpers are tagged `GlintChrome.id` and excluded.
 - The editor canvas spans the transparent title bar, so it drags the window itself (`performDrag`).

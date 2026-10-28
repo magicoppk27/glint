@@ -182,6 +182,7 @@ struct HomeView: View {
             }
             .buttonStyle(PillButtonStyle(prominent: false))
             SoundToggle()
+            ThemeButton()
             SettingsLink {
                 Image(systemName: "gearshape").font(.system(size: 14, weight: .semibold)).frame(width: 14)
             }
@@ -305,7 +306,7 @@ struct SoundToggle: View {
 struct Background: View {
     var body: some View {
         ZStack {
-            Color(nsColor: .windowBackgroundColor)
+            WindowBackdrop()
             RadialGradient(colors: [Color(hex: 0x7C5CFF).opacity(0.16), .clear], center: .topLeading, startRadius: 0, endRadius: 520)
             RadialGradient(colors: [Color(hex: 0xEC4899).opacity(0.10), .clear], center: .topTrailing, startRadius: 0, endRadius: 460)
         }
@@ -349,9 +350,7 @@ struct ActionTile: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, minHeight: 120, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(.background.opacity(hover ? 1 : 0.75)))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(.primary.opacity(hover ? 0.12 : 0.07)))
-            .shadow(color: .black.opacity(hover ? 0.12 : 0.04), radius: hover ? 14 : 6, y: hover ? 6 : 2)
+            .tileSurface(hover: hover)
             .scaleEffect(hover ? 1.02 : 1)
             .contentShape(Rectangle())
         }
@@ -594,17 +593,6 @@ struct EmptyLibrary: View {
 
 // MARK: - Settings
 
-struct SettingsView: View {
-    var body: some View {
-        TabView {
-            GeneralSettings().tabItem { Label("General", systemImage: "gearshape") }
-            PresentSettings().tabItem { Label("Presenting", systemImage: "cursorarrow.rays") }
-            ShortcutSettings().tabItem { Label("Shortcuts", systemImage: "command") }
-            AboutSettings().tabItem { Label("About", systemImage: "sparkles") }
-        }
-        .frame(width: 600, height: 560)
-    }
-}
 
 struct GeneralSettings: View {
     @AppStorage("afterCapture") private var after = "editor"
@@ -645,9 +633,6 @@ struct GeneralSettings: View {
                         catch { launchAtLogin = SMAppService.mainApp.status == .enabled }
                     }
                 Toggle("Keep clipboard history (last \(ClipboardHistory.limit) text items)", isOn: $clipboardHistory)
-                LabeledContent("Screen Recording") {
-                    Button("Open Privacy Settings") { AppController.openPrivacySettings() }
-                }
             }
         }
         .formStyle(.grouped)

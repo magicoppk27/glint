@@ -24,6 +24,7 @@ struct GlintApp: App {
                     .keyboardShortcut("v", modifiers: [.command, .shift])
             }
             CommandMenu("Capture") { CaptureMenuItems() }
+            CommandGroup(after: .toolbar) { Menu("Theme") { ThemeMenu() } }
         }
 
         Settings { SettingsView() }
@@ -39,6 +40,7 @@ struct GlintApp: App {
             Divider()
             OpenHomeButton()
             ShutterSoundMenuToggle()
+            Menu("Theme") { ThemeMenu() }
             SettingsLink { Text("Settings…") }
             Divider()
             Button("Quit Glint") { NSApp.terminate(nil) }
@@ -190,6 +192,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if ProcessInfo.processInfo.environment["GLINT_HOTKEY_TEST"] != nil { DebugSnapshot.hotkeyTest() }
         if ProcessInfo.processInfo.environment["GLINT_PERF"] != nil { DebugSnapshot.perfTest() }
         if let dir = ProcessInfo.processInfo.environment["GLINT_PRESENT_TEST"] { DebugPresent.run(into: dir) }
+        if let dir = ProcessInfo.processInfo.environment["GLINT_DESIGN"] { DebugDesign.run(into: dir) }
         // GLINT_CLOSE_HOME=1: close the home window shortly after launch (reopen testing).
         if ProcessInfo.processInfo.environment["GLINT_CLOSE_HOME"] != nil {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) {

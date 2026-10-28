@@ -202,12 +202,7 @@ struct KeystrokeView: View {
                     .truncationMode(.head)
                     .padding(.horizontal, fontSize * 0.7)
                     .padding(.vertical, fontSize * 0.36)
-                    .background(Capsule().fill(Color.black.opacity(0.72)))
-                    .overlay(Capsule().strokeBorder(
-                        e.isCombo ? AnyShapeStyle(LinearGradient(colors: [Color(hex: 0x7C5CFF), Color(hex: 0xC145F5)], startPoint: .leading, endPoint: .trailing))
-                                  : AnyShapeStyle(Color.white.opacity(0.14)),
-                        lineWidth: e.isCombo ? 1.5 : 1))
-                    .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
+                    .overlaySurface(Capsule(), accent: e.isCombo)
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
         }
