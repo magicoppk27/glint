@@ -17,6 +17,7 @@ enum DebugPresent {
             await hotkeyReleaseTest()
             await lensTest(dir)
             await drawTest(dir)
+            await keysTest(dir)
             Presenter.shared.turnOffAll()
             Prefs.d.set(saved, forKey: "presentingOn")
             print("PRESENT done")
@@ -190,6 +191,49 @@ enum DebugPresent {
         canvas.keyDown(with: esc)
         await wait(0.1)
         check("esc stops drawing", !d.isShowing && !Presenter.shared.isOn(.draw) && toolbar?.isVisible == false)
+    }
+
+    // MARK: Keystrokes
+
+    static func keysTest(_ dir: String) async {
+        let t0 = Date()
+        var log = KeystrokeLog()
+        log.add("h", combo: false, at: t0)
+        log.add("i", combo: false, at: t0.addingTimeInterval(0.3))
+        log.add("⌘K", combo: true, at: t0.addingTimeInterval(0.4))
+        log.add("⌘K", combo: true, isRepeat: true, at: t0.addingTimeInterval(0.5))
+        log.add("x", combo: false, at: t0.addingTimeInterval(0.6))
+        check("keys merge typing, repeat holds chip", log.entries.map(\.text) == ["hi", "⌘K", "x"], "\(log.entries.map(\.text))")
+        for i in 0..<6 { log.add("⌘\(i)", combo: true, at: t0.addingTimeInterval(0.7)) }
+        check("keys keep last \(KeystrokeLog.maxEntries)", log.entries.map(\.text) == ["⌘2", "⌘3", "⌘4", "⌘5"])
+        _ = log.prune(at: t0.addingTimeInterval(0.7 + KeystrokeLog.lifetime + 0.1))
+        check("keys fade after \(KeystrokeLog.lifetime) s", log.entries.isEmpty)
+        let d1 = KeystrokeLog.describe(keyCode: kVK_ANSI_K, flags: [.maskCommand, .maskShift], characters: "K", plain: "k")
+        let d2 = KeystrokeLog.describe(keyCode: kVK_Return, flags: [], characters: "\r", plain: "\r")
+        let d3 = KeystrokeLog.describe(keyCode: kVK_Space, flags: [], characters: " ", plain: " ")
+        check("keys formatting", d1 == ("⇧⌘K", true) && d2 == ("↩", true) && d3 == (" ", false), "\(d1) \(d2) \(d3)")
+
+        print("PRESENT info inputMonitoring=\(Keystrokes.hasPermission)")
+        guard Keystrokes.hasPermission else { print("PRESENT SKIP keys overlay — Input Monitoring not granted yet"); return }
+        Presenter.shared.set(.keys, true)
+        check("keys overlay on", Keystrokes.shared.isShowing)
+        // Events are handed to the overlay directly, never posted, so nothing types into the front app.
+        let src = CGEventSource(stateID: .privateState)
+        let keys: [(Int, CGEventFlags)] = [(kVK_ANSI_G, []), (kVK_ANSI_O, []), (kVK_ANSI_S, .maskCommand), (kVK_Return, [])]
+        for (code, flags) in keys {
+            let e = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(code), keyDown: true)!
+            e.flags = flags
+            Keystrokes.shared.handle(.keyDown, e)
+        }
+        let texts = Keystrokes.shared.model.log.entries.map(\.text)
+        check("keys overlay shows events", texts == ["go", "⌘S", "↩"], "\(texts)")
+        await wait(0.4)
+        if let p = NSApp.windows.first(where: { $0.identifier == GlintChrome.id && $0.contentView is NSHostingView<KeystrokeView> }) {
+            DebugSnapshot.save(p, "\(dir)/keys.png")
+        }
+        await wait(KeystrokeLog.lifetime + 0.5)
+        check("keys overlay clears itself", Keystrokes.shared.model.log.entries.isEmpty)
+        Presenter.shared.set(.keys, false)
     }
 
     // MARK: Hotkeys

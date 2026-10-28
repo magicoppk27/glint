@@ -202,7 +202,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // GLINT_PERMCHECK=1: print whether macOS still recognises this build's permission grants.
         if ProcessInfo.processInfo.environment["GLINT_PERMCHECK"] != nil {
-            print("PERMCHECK screenRecording=\(CGPreflightScreenCaptureAccess()) accessibility=\(AXIsProcessTrusted())")
+            print("PERMCHECK screenRecording=\(CGPreflightScreenCaptureAccess()) accessibility=\(AXIsProcessTrusted()) inputMonitoring=\(CGPreflightListenEventAccess())")
             NSApp.terminate(nil)
         }
     }

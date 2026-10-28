@@ -6,13 +6,14 @@ import SwiftUI
 // the screen, keystrokes). They live next to the capture tools and share Glint's hotkeys and Settings.
 
 enum PresentFeature: String, CaseIterable, Identifiable {
-    case halo, lens, draw
+    case halo, keys, lens, draw
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .halo: "Cursor Highlight"
+        case .keys: "Show Keystrokes"
         case .lens: "Zoom Lens"
         case .draw: "Draw on Screen"
         }
@@ -21,6 +22,7 @@ enum PresentFeature: String, CaseIterable, Identifiable {
     var subtitle: String {
         switch self {
         case .halo: "Halo follows the mouse, flashes on clicks"
+        case .keys: "Shortcuts and typing appear on screen"
         case .lens: "Live magnifier · tap to toggle, hold to peek"
         case .draw: "Glint's markup tools, right on the screen"
         }
@@ -29,6 +31,7 @@ enum PresentFeature: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .halo: "cursorarrow.rays"
+        case .keys: "keyboard"
         case .lens: "plus.magnifyingglass"
         case .draw: "pencil.tip.crop.circle"
         }
@@ -37,6 +40,7 @@ enum PresentFeature: String, CaseIterable, Identifiable {
     var colors: [Color] {
         switch self {
         case .halo: [Color(hex: 0xF5A300), Color(hex: 0xFFD60A)]
+        case .keys: [Color(hex: 0x11B886), Color(hex: 0x5EE2A0)]
         case .lens: [Color(hex: 0x2F80ED), Color(hex: 0x56CCF2)]
         case .draw: [Color(hex: 0x7C5CFF), Color(hex: 0xC145F5)]
         }
@@ -45,13 +49,14 @@ enum PresentFeature: String, CaseIterable, Identifiable {
     var defaultKey: UInt32 {
         switch self {
         case .halo: UInt32(kVK_ANSI_C)
+        case .keys: UInt32(kVK_ANSI_K)
         case .lens: UInt32(kVK_ANSI_M)
         case .draw: UInt32(kVK_ANSI_D)
         }
     }
 
     /// Modes that stay on across launches; the others are one-off sessions.
-    var remembered: Bool { self == .halo }
+    var remembered: Bool { self == .halo || self == .keys }
 }
 
 @MainActor
@@ -77,6 +82,7 @@ final class Presenter: ObservableObject {
         case .halo: on ? CursorHalo.shared.show() : CursorHalo.shared.hide()
         case .lens: if on { if !ZoomLens.shared.show() { active.remove(f) } } else { ZoomLens.shared.hide() }
         case .draw: on ? ScreenDraw.shared.show() : ScreenDraw.shared.hide()
+        case .keys: if on { if !Keystrokes.shared.show() { active.remove(f) } } else { Keystrokes.shared.hide() }
         }
         Prefs.d.set(active.filter(\.remembered).map(\.rawValue), forKey: key)
     }
@@ -94,7 +100,9 @@ final class Presenter: ObservableObject {
     /// Brings back the modes that were on when Glint quit.
     func restore() {
         let saved = Prefs.d.stringArray(forKey: key) ?? []
-        saved.compactMap(PresentFeature.init(rawValue:)).filter(\.remembered).forEach { set($0, true) }
+        saved.compactMap(PresentFeature.init(rawValue:)).filter(\.remembered)
+            .filter { $0 != .keys || Keystrokes.hasPermission } // never prompt at launch
+            .forEach { set($0, true) }
     }
 }
 
@@ -217,6 +225,8 @@ struct PresentSettings: View {
     @AppStorage("haloRight") private var haloRight = CursorHalo.Defaults.right
     @AppStorage("lensZoom") private var lensZoom = ZoomLens.Defaults.zoom
     @AppStorage("lensSize") private var lensSize = ZoomLens.Defaults.size
+    @AppStorage("keysFontSize") private var keysFontSize = Keystrokes.Defaults.fontSize
+    @State private var keysAllowed = Keystrokes.hasPermission
 
     var body: some View {
         Form {
@@ -244,6 +254,22 @@ struct PresentSettings: View {
                 Text("Shown on screen and in other apps' recordings, never in Glint's own screenshots.")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
             }
+            Section {
+                PresentToggleRow(feature: .keys)
+                Slider(value: $keysFontSize, in: 16...48) { Text("Text size") }
+                LabeledContent("Input Monitoring") {
+                    HStack {
+                        Text(keysAllowed ? "Allowed" : "Not allowed").foregroundStyle(keysAllowed ? Color(hex: 0x34C759) : Color.secondary)
+                        if !keysAllowed { Button("Open System Settings") { NSWorkspace.shared.open(Keystrokes.settingsURL) } }
+                    }
+                }
+            } header: {
+                Text("Keystrokes")
+            } footer: {
+                Text("Needs Input Monitoring, asked the first time you turn it on. Keys are only displayed, never stored or sent, and macOS hides keys typed into password fields.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+            }
+            .onAppear { keysAllowed = Keystrokes.hasPermission }
             Section {
                 PresentToggleRow(feature: .draw)
             } header: {
