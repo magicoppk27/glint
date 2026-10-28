@@ -71,6 +71,7 @@ final class CanvasView: NSView, NSTextFieldDelegate {
     // MARK: Geometry
 
     private var fit: (zoom: CGFloat, origin: CGPoint) {
+        if model.onScreen { return (1 / model.scale, .zero) } // the view is the screen, one image pixel per pixel
         let out = model.outputSize
         let aw = bounds.width - CanvasInsets.left - CanvasInsets.right
         let ah = bounds.height - CanvasInsets.top - CanvasInsets.bottom
@@ -163,7 +164,7 @@ final class CanvasView: NSView, NSTextFieldDelegate {
 
     private func updateShadow(_ r: CGRect) {
         guard let layer else { return }
-        let opacity: Float = model.backdrop.enabled ? 0 : 0.28
+        let opacity: Float = model.backdrop.enabled || model.onScreen ? 0 : 0.28
         if r == shadowRect, layer.shadowOpacity == opacity { return }
         shadowRect = r
         CATransaction.begin(); CATransaction.setDisableActions(true)
@@ -217,7 +218,7 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         let vp = convert(event.locationInWindow, from: nil)
         // The canvas spans the transparent title bar, so it has to move the window itself:
         // the top strip always drags it, and so does empty space around the image with Select.
-        if vp.y < 30 || (model.tool == .select && !outputRectInView.contains(vp)) {
+        if !model.onScreen, vp.y < 30 || (model.tool == .select && !outputRectInView.contains(vp)) {
             commitText()
             if event.clickCount == 2, vp.y < 30 { window?.performZoom(nil) } else { window?.performDrag(with: event) }
             return
@@ -342,6 +343,11 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         needsDisplay = true
     }
 
+    /// On the screen a right-click ends drawing (like esc).
+    override func rightMouseDown(with event: NSEvent) {
+        if model.onScreen { commitText(); model.closeEditor?() } else { super.rightMouseDown(with: event) }
+    }
+
     // MARK: Keyboard
 
     override func keyDown(with event: NSEvent) {
@@ -354,7 +360,8 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         case 53: // esc
             if model.pendingCrop != nil { model.pendingCrop = nil; return }
             if model.selectedID != nil { model.selectedID = nil; return }
-            window?.performClose(nil); return
+            if model.onScreen { model.closeEditor?() } else { window?.performClose(nil) }
+            return
         case 123, 124, 125, 126: // arrows nudge selection
             if let id = model.selectedID, let i = model.annotations.firstIndex(where: { $0.id == id }) {
                 let step: CGFloat = (flags.contains(.shift) ? 10 : 1) * model.scale
@@ -366,8 +373,8 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         default: break
         }
         if flags.isEmpty || flags == .shift, let ch = event.charactersIgnoringModifiers?.lowercased().first {
-            if let t = Tool.allCases.first(where: { $0.key == ch }) { model.tool = t; return }
-            if ch == "k" { model.backdrop.enabled.toggle(); return }
+            if let t = model.tools.first(where: { $0.key == ch }) { model.tool = t; return }
+            if ch == "k", !model.onScreen { model.backdrop.enabled.toggle(); return }
             if let n = Int(String(ch)), (1...8).contains(n) { model.colorIndex = n - 1; return }
         }
         super.keyDown(with: event)

@@ -50,7 +50,7 @@ enum Renderer {
             ctx.clip(to: CGRect(origin: .zero, size: ir.size))
         }
         ctx.translateBy(x: pad - ir.minX, y: pad - ir.minY)
-        drawImage(ctx, base ?? m.base, in: m.baseBounds)
+        if !m.onScreen { drawImage(ctx, base ?? m.base, in: m.baseBounds) }
 
         var all = m.annotations
         if let d = draft { all.append(d) }

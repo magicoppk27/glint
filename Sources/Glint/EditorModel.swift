@@ -189,9 +189,30 @@ final class EditorModel: ObservableObject {
         base = shot.image
         scale = shot.scale
         sourceURL = shot.url
+        screenSize = nil
     }
 
-    var baseBounds: CGRect { CGRect(x: 0, y: 0, width: base.width, height: base.height) }
+    /// Drawing straight on the screen: no picture underneath, the canvas is the screen's pixels.
+    init(screenPixels size: CGSize, scale: CGFloat) {
+        let ctx = CGContext(data: nil, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        base = ctx.makeImage()!
+        self.scale = scale
+        screenSize = size
+        tools = Self.screenTools
+    }
+
+    /// Set when drawing on the screen (see `init(screenPixels:scale:)`).
+    let screenSize: CGSize?
+    var onScreen: Bool { screenSize != nil }
+    /// Tools offered here; on the screen only the ones that don't need a picture underneath.
+    private(set) var tools: [Tool] = Tool.allCases
+    static let screenTools: [Tool] = [.select, .arrow, .line, .rect, .oval, .pen, .highlighter, .text, .counter, .stepBox, .spotlight]
+
+    var baseBounds: CGRect {
+        if let s = screenSize { return CGRect(origin: .zero, size: s) }
+        return CGRect(x: 0, y: 0, width: base.width, height: base.height)
+    }
     var imageRect: CGRect { crop ?? baseBounds }
     var padPx: CGFloat { backdrop.enabled ? backdrop.padding * scale : 0 }
     var outputSize: CGSize { CGSize(width: imageRect.width + padPx * 2, height: imageRect.height + padPx * 2) }
@@ -216,6 +237,13 @@ final class EditorModel: ObservableObject {
     func add(_ a: Annotation) {
         checkpoint()
         annotations.append(a)
+    }
+
+    func clearAll() {
+        guard !annotations.isEmpty else { return }
+        checkpoint()
+        annotations.removeAll()
+        selectedID = nil
     }
 
     func deleteSelected() {

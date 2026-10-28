@@ -16,6 +16,7 @@ enum DebugPresent {
             await haloTest(dir)
             await hotkeyReleaseTest()
             await lensTest(dir)
+            await drawTest(dir)
             Presenter.shared.turnOffAll()
             Prefs.d.set(saved, forKey: "presentingOn")
             print("PRESENT done")
@@ -112,6 +113,83 @@ enum DebugPresent {
         let heldOpen = lens.isShowing
         lens.keyUp(); await wait(0.2)
         check("lens hold peeks, release closes", heldOpen && !lens.isShowing)
+    }
+
+    // MARK: Draw on screen
+
+    static func drawTest(_ dir: String) async {
+        let keys = ["drawTool", "drawColor", "drawSize"]
+        let saved = keys.map { Prefs.d.object(forKey: $0) }
+        defer { for (k, v) in zip(keys, saved) { Prefs.d.set(v, forKey: k) } }
+
+        Presenter.shared.set(.draw, true)
+        await wait(0.3)
+        let d = ScreenDraw.shared
+        guard let m = d.model, let panel = NSApp.windows.first(where: { $0 is DrawPanel && $0.isVisible }),
+              let canvas = panel.contentView as? CanvasView, let screen = panel.screen else {
+            check("draw opens", false); return
+        }
+        check("draw opens", panel.frame == screen.frame && panel.isKeyWindow && panel.identifier != GlintChrome.id,
+              "key=\(panel.isKeyWindow) frame=\(panel.frame)")
+        let toolbar = NSApp.windows.first { $0.identifier == GlintChrome.id && $0.contentView is NSHostingView<DrawToolbar> }
+        check("draw toolbar is chrome", toolbar?.isVisible == true && (toolbar?.frame.width ?? 0) > 600, "\(toolbar?.frame ?? .zero)")
+        if let toolbar { DebugSnapshot.save(toolbar, "\(dir)/draw-toolbar.png") }
+
+        func mouse(_ type: NSEvent.EventType, _ p: CGPoint, shift: Bool = false) -> NSEvent {
+            NSEvent.mouseEvent(with: type, location: CGPoint(x: p.x, y: panel.frame.height - p.y), modifierFlags: shift ? .shift : [],
+                               timestamp: 0, windowNumber: panel.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+        }
+        func drag(_ tool: Tool, _ a: CGPoint, _ b: CGPoint) {
+            m.tool = tool
+            canvas.mouseDown(with: mouse(.leftMouseDown, a))
+            for i in 1...8 { let t = CGFloat(i) / 8; canvas.mouseDragged(with: mouse(.leftMouseDragged, CGPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t))) }
+            canvas.mouseUp(with: mouse(.leftMouseUp, b))
+        }
+        // Points in top-left view coordinates, away from the toolbar at the bottom.
+        let o = CGPoint(x: screen.frame.width * 0.2, y: screen.frame.height * 0.2)
+        m.colorIndex = 0
+        drag(.arrow, o, CGPoint(x: o.x + 300, y: o.y + 160))
+        drag(.pen, CGPoint(x: o.x, y: o.y + 260), CGPoint(x: o.x + 260, y: o.y + 300))
+        m.colorIndex = 5
+        drag(.stepBox, CGPoint(x: o.x + 380, y: o.y + 60), CGPoint(x: o.x + 620, y: o.y + 220))
+        canvas.commitText()
+        let kinds = m.annotations.map { "\($0.kind)" }
+        check("draw tools make shapes", kinds == ["arrow", "pen", "rect", "counter"], "\(kinds)")
+        if let a = m.annotations.first {
+            check("draw maps points to pixels", abs(a.start.x - o.x * m.scale) < 1 && abs(a.start.y - o.y * m.scale) < 1,
+                  "\(a.start) vs \(o) × \(m.scale)")
+        }
+        canvas.display()
+        await wait(0.2)
+
+        // The drawing is in Glint's captures; the toolbar is not.
+        if let f = try? await CaptureService.shared.freeze([screen]).first {
+            let s = f.scale
+            let crop = CGRect(x: (o.x - 40) * s, y: (o.y - 70) * s, width: 760 * s, height: 420 * s).integral
+            if let img = f.image.cropping(to: crop) {
+                try? NSBitmapImageRep(cgImage: img).representation(using: .png, properties: [:])?
+                    .write(to: URL(fileURLWithPath: "\(dir)/draw-captured.png"))
+            }
+            let rep = NSBitmapImageRep(cgImage: f.image)
+            let mid = CGPoint(x: (o.x + 150) * s, y: (o.y + 80) * s) // on the arrow's shaft
+            let c = rep.colorAt(x: Int(mid.x), y: Int(mid.y))?.usingColorSpace(.sRGB)
+            check("drawing appears in captures", (c?.redComponent ?? 0) > 0.8 && (c?.greenComponent ?? 1) < 0.4, "\(c?.hexString ?? "nil")")
+        } else { check("drawing appears in captures", false, "no capture") }
+
+        m.undo()
+        check("draw undo (box + step is one step)", m.annotations.count == 2)
+        m.clearAll()
+        check("draw clear", m.annotations.isEmpty)
+        d.setClickThrough(true)
+        check("draw click-through", panel.ignoresMouseEvents)
+        d.setClickThrough(false)
+
+        let esc = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: panel.windowNumber,
+                                   context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53)!
+        m.selectedID = nil
+        canvas.keyDown(with: esc)
+        await wait(0.1)
+        check("esc stops drawing", !d.isShowing && !Presenter.shared.isOn(.draw) && toolbar?.isVisible == false)
     }
 
     // MARK: Hotkeys

@@ -6,7 +6,7 @@ import SwiftUI
 // the screen, keystrokes). They live next to the capture tools and share Glint's hotkeys and Settings.
 
 enum PresentFeature: String, CaseIterable, Identifiable {
-    case halo, lens
+    case halo, lens, draw
 
     var id: String { rawValue }
 
@@ -14,6 +14,7 @@ enum PresentFeature: String, CaseIterable, Identifiable {
         switch self {
         case .halo: "Cursor Highlight"
         case .lens: "Zoom Lens"
+        case .draw: "Draw on Screen"
         }
     }
 
@@ -21,6 +22,7 @@ enum PresentFeature: String, CaseIterable, Identifiable {
         switch self {
         case .halo: "Halo follows the mouse, flashes on clicks"
         case .lens: "Live magnifier · tap to toggle, hold to peek"
+        case .draw: "Glint's markup tools, right on the screen"
         }
     }
 
@@ -28,6 +30,7 @@ enum PresentFeature: String, CaseIterable, Identifiable {
         switch self {
         case .halo: "cursorarrow.rays"
         case .lens: "plus.magnifyingglass"
+        case .draw: "pencil.tip.crop.circle"
         }
     }
 
@@ -35,6 +38,7 @@ enum PresentFeature: String, CaseIterable, Identifiable {
         switch self {
         case .halo: [Color(hex: 0xF5A300), Color(hex: 0xFFD60A)]
         case .lens: [Color(hex: 0x2F80ED), Color(hex: 0x56CCF2)]
+        case .draw: [Color(hex: 0x7C5CFF), Color(hex: 0xC145F5)]
         }
     }
 
@@ -42,6 +46,7 @@ enum PresentFeature: String, CaseIterable, Identifiable {
         switch self {
         case .halo: UInt32(kVK_ANSI_C)
         case .lens: UInt32(kVK_ANSI_M)
+        case .draw: UInt32(kVK_ANSI_D)
         }
     }
 
@@ -71,6 +76,7 @@ final class Presenter: ObservableObject {
         switch f {
         case .halo: on ? CursorHalo.shared.show() : CursorHalo.shared.hide()
         case .lens: if on { if !ZoomLens.shared.show() { active.remove(f) } } else { ZoomLens.shared.hide() }
+        case .draw: on ? ScreenDraw.shared.show() : ScreenDraw.shared.hide()
         }
         Prefs.d.set(active.filter(\.remembered).map(\.rawValue), forKey: key)
     }
@@ -236,6 +242,14 @@ struct PresentSettings: View {
                 Text("Cursor highlight")
             } footer: {
                 Text("Shown on screen and in other apps' recordings, never in Glint's own screenshots.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+            }
+            Section {
+                PresentToggleRow(feature: .draw)
+            } header: {
+                Text("Draw on screen")
+            } footer: {
+                Text("Uses the editor's tools and keys (A arrow, R box, D draw, N step, Q box + step, S spotlight, 1–8 colors). ⌘Z undo, ⌘⌫ clear, esc or right-click to stop. The hand button lets clicks through to the apps underneath; the camera opens a screenshot with your drawing in the editor.")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
             }
             Section {
