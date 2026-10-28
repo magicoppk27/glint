@@ -44,19 +44,27 @@ final class CaptureService {
     func freeze(_ screens: [NSScreen]) async throws -> [Frozen] {
         let content = try await content()
         let chrome = Self.chromeWindows(in: content)
-        var out: [Frozen] = []
-        for screen in screens {
+        // All displays are captured at the same time (was one after another).
+        var jobs: [(Int, NSScreen, SCContentFilter, SCStreamConfiguration)] = []
+        for (i, screen) in screens.enumerated() {
             guard let id = screen.displayID, let display = content.displays.first(where: { $0.displayID == id }) else { continue }
-            let filter = SCContentFilter(display: display, excludingWindows: chrome)
             let cfg = SCStreamConfiguration()
             let scale = screen.backingScaleFactor
             cfg.width = Int(screen.frame.width * scale)
             cfg.height = Int(screen.frame.height * scale)
             cfg.showsCursor = false
             cfg.captureResolution = .best
-            let img = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: cfg)
-            out.append(Frozen(screen: screen, image: img))
+            jobs.append((i, screen, SCContentFilter(display: display, excludingWindows: chrome), cfg))
         }
+        let images: [Int: CGImage] = try await withThrowingTaskGroup(of: (Int, CGImage).self) { group in
+            for (i, _, filter, cfg) in jobs {
+                group.addTask { (i, try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: cfg)) }
+            }
+            var done: [Int: CGImage] = [:]
+            for try await (i, img) in group { done[i] = img }
+            return done
+        }
+        let out = jobs.compactMap { job in images[job.0].map { Frozen(screen: job.1, image: $0) } }
         if out.isEmpty { throw CaptureError.noDisplay }
         return out
     }
@@ -176,9 +184,9 @@ final class AppController {
         }
         Sound.play()
         var shot = Shot(image: img, scale: s)
-        if Prefs.autoSave {
-            shot.url = try? ImageStore.save(img, scale: s)
-            Library.shared.reload()
+        if Prefs.autoSave, let url = try? ImageStore.reserveURL() {
+            shot.url = url
+            ImageStore.saveInBackground(img, scale: s, to: url) { Library.shared.reload() }
         }
         if Prefs.autoCopy { ImageStore.copy(img, scale: s) }
         switch Prefs.afterCapture {

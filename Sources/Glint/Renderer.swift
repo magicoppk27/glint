@@ -19,7 +19,8 @@ enum Renderer {
     }
 
     /// shadowScale: device pixels per output pixel (shadows are specified in device space).
-    static func drawScene(_ ctx: CGContext, _ m: EditorModel, draft: Annotation?, shadowScale k: CGFloat) {
+    /// `base` lets the on-screen canvas pass a copy of the screenshot pre-scaled to display size.
+    static func drawScene(_ ctx: CGContext, _ m: EditorModel, draft: Annotation?, shadowScale k: CGFloat, base: CGImage? = nil) {
         let ir = m.imageRect
         let pad = m.padPx
         ctx.saveGState()
@@ -49,7 +50,7 @@ enum Renderer {
             ctx.clip(to: CGRect(origin: .zero, size: ir.size))
         }
         ctx.translateBy(x: pad - ir.minX, y: pad - ir.minY)
-        drawImage(ctx, m.base, in: m.baseBounds)
+        drawImage(ctx, base ?? m.base, in: m.baseBounds)
 
         var all = m.annotations
         if let d = draft { all.append(d) }

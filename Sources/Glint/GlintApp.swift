@@ -185,6 +185,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let dir = ProcessInfo.processInfo.environment["GLINT_SNAPSHOT"] { DebugSnapshot.run(into: dir) }
         if let dir = ProcessInfo.processInfo.environment["GLINT_STITCH_TEST"] { DebugSnapshot.stitchTest(into: dir) }
         if ProcessInfo.processInfo.environment["GLINT_HOTKEY_TEST"] != nil { DebugSnapshot.hotkeyTest() }
+        if ProcessInfo.processInfo.environment["GLINT_PERF"] != nil { DebugSnapshot.perfTest() }
         // GLINT_CLOSE_HOME=1: close the home window shortly after launch (reopen testing).
         if ProcessInfo.processInfo.environment["GLINT_CLOSE_HOME"] != nil {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
@@ -203,6 +204,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        ImageStore.resolvePendingCopy()
+    }
 
     /// Dock icon click: always bring the main window back if it isn't showing.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {

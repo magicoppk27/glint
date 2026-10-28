@@ -96,10 +96,10 @@ final class OverlayView: NSView {
     let frozen: Frozen
     weak var owner: SelectionOverlay?
 
-    private var mouse: CGPoint?
+    fileprivate(set) var mouse: CGPoint?
     private var dragStart: CGPoint?
     private var dragEnd: CGPoint?
-    private var hovered: (info: WinInfo, rect: CGRect)?
+    fileprivate(set) var hovered: (info: WinInfo, rect: CGRect)?
     private lazy var rep = NSBitmapImageRep(cgImage: frozen.image)
 
     init(frame: CGRect, frozen: Frozen, owner: SelectionOverlay) {
@@ -132,7 +132,10 @@ final class OverlayView: NSView {
     }
 
     private func update(local p: CGPoint) {
-        owner?.views.forEach { if $0 !== self { $0.clearMouse() } }
+        // Only this screen (and one the pointer just left) needs redrawing — not every display.
+        owner?.views.forEach { v in
+            if v !== self, v.mouse != nil || v.hovered != nil { v.clearMouse(); v.needsDisplay = true }
+        }
         mouse = p
         let g = CGPoint(x: p.x + sf.minX, y: p.y + sf.minY)
         if owner?.mode != .color, owner?.mode != .area, let w = owner?.window(at: g) {
@@ -141,7 +144,7 @@ final class OverlayView: NSView {
         } else {
             hovered = nil
         }
-        owner?.redrawAll()
+        needsDisplay = true
     }
 
     func clearMouse() { mouse = nil; hovered = nil }
@@ -174,7 +177,7 @@ final class OverlayView: NSView {
         }
         dragEnd = p
         mouse = p
-        owner?.redrawAll()
+        needsDisplay = true
     }
 
     override func mouseUp(with event: NSEvent) {

@@ -79,6 +79,76 @@ enum DebugSnapshot {
         }
     }
 
+    /// GLINT_PERF=1: times the capture pipeline on a 5K screenshot-like image and prints PERF lines.
+    /// Launch via `open --env GLINT_PERF=1 --stdout <file> /Applications/Glint.app` so capture permission applies.
+    static func perfTest() {
+        func ms(_ runs: Int = 3, _ f: () -> Void) -> String {
+            var t: [Double] = []
+            for _ in 0..<runs { let s = CACurrentMediaTime(); f(); t.append((CACurrentMediaTime() - s) * 1000) }
+            t.sort(); return String(format: "%.1f", t[t.count / 2])
+        }
+        // A 5120×2880 screenshot-like image: text rows and colored blocks.
+        let W = 5120, H = 2880
+        let cs = CGColorSpace(name: CGColorSpace.sRGB)!
+        let ctx = CGContext(data: nil, width: W, height: H, bitsPerComponent: 8, bytesPerRow: 0, space: cs, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        ctx.translateBy(x: 0, y: CGFloat(H)); ctx.scaleBy(x: 1, y: -1)
+        ctx.setFillColor(NSColor.white.cgColor); ctx.fill(CGRect(x: 0, y: 0, width: W, height: H))
+        Renderer.withFlippedNSContext(ctx) {
+            for i in 0..<(H / 48) {
+                let y = CGFloat(i * 48)
+                NSColor(hue: CGFloat(i % 17) / 17, saturation: 0.45, brightness: 0.92, alpha: 1).setFill()
+                NSRect(x: 40 + CGFloat((i * 37) % 900), y: y + 10, width: 200 + CGFloat((i * 53) % 700), height: 28).fill()
+                NSAttributedString(string: "Row \(i) — the quick brown fox jumps over the lazy dog \(i * 7) · settings · profile · billing", attributes: [.font: NSFont.systemFont(ofSize: 26)]).draw(at: CGPoint(x: 1900, y: y + 8))
+            }
+        }
+        let img = ctx.makeImage()!
+        var out: [String] = []
+        out.append("copy=\(ms { ImageStore.copy(img, scale: 2) })")
+        out.append("pngEncode=\(ms { _ = ImageStore.pngData(img, scale: 2) })")
+        out.append("soundCall=\(ms(1) { Sound.play(force: true) })")
+        // what deliver() now does on the main thread before the editor shows
+        out.append("deliverMain=\(ms { if let u = try? ImageStore.reserveURL() { ImageStore.saveInBackground(img, scale: 2, to: u) { try? FileManager.default.removeItem(at: u) } }; ImageStore.copy(img, scale: 2) })")
+        // Editor: full canvas draw at a typical window size
+        EditorWindowController.show(Shot(image: img, scale: 2))
+        if let wc = EditorWindowController.open.last, let win = wc.window {
+            win.setFrame(CGRect(x: 100, y: 100, width: 1500, height: 950), display: true)
+            func find(_ v: NSView) -> CanvasView? { (v as? CanvasView) ?? v.subviews.lazy.compactMap(find).first }
+            if let canvas = find(win.contentView!) {
+                win.layoutIfNeeded()
+                // Time only the view's own draw(_:) into a 2x bitmap — what runs on the main thread per frame.
+                let b = canvas.bounds
+                if let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(b.width * 2), pixelsHigh: Int(b.height * 2), bitsPerSample: 8,
+                                              samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0),
+                   let gc = NSGraphicsContext(bitmapImageRep: rep) {
+                    rep.size = b.size
+                    let drawMs = ms(9) {
+                        NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = gc
+                        gc.cgContext.saveGState()
+                        gc.cgContext.translateBy(x: 0, y: b.height); gc.cgContext.scaleBy(x: 1, y: -1)
+                        canvas.draw(b)
+                        gc.cgContext.restoreGState()
+                        NSGraphicsContext.restoreGraphicsState()
+                    }
+                    out.append("editorDraw=\(drawMs)(\(Int(b.width))x\(Int(b.height)))")
+                }
+            }
+            win.close()
+        }
+        Task {
+            // Freeze every display (what happens before the selection overlay appears)
+            var t: [Double] = []
+            for _ in 0..<3 {
+                let s = CACurrentMediaTime()
+                _ = try? await CaptureService.shared.freeze(NSScreen.screens)
+                t.append((CACurrentMediaTime() - s) * 1000)
+            }
+            t.sort()
+            out.append(String(format: "freezeAll=%.1f(displays=%d)", t[1], NSScreen.screens.count))
+            print("PERF " + out.joined(separator: " "))
+            NSApp.terminate(nil)
+        }
+    }
+
     static func hotkeyTest() {
         let st = HotkeyStore.shared
         let custom = Hotkey(keyCode: UInt32(kVK_ANSI_A), modifiers: UInt32(controlKey | optionKey))
@@ -133,6 +203,14 @@ enum DebugSnapshot {
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                 if let win = wc.window { save(win, "\(dir)/editor.png") }
+                // Real on-screen pixels (includes GPU layer shadows), via Glint's own window capture.
+                if ProcessInfo.processInfo.environment["GLINT_WINSHOT"] != nil, let win = wc.window {
+                    Task {
+                        if let (img, sc) = try? await CaptureService.shared.captureWindow(CGWindowID(win.windowNumber)) {
+                            try? ImageStore.write(img, scale: sc, to: URL(fileURLWithPath: "\(dir)/editor-live.png"))
+                        }
+                    }
+                }
                 if let img = m.render() { try? ImageStore.write(img, scale: m.scale, to: URL(fileURLWithPath: "\(dir)/export.png")) }
                 ThumbnailController.show(shot)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {

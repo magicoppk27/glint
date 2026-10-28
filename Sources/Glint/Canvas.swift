@@ -20,6 +20,10 @@ final class CanvasView: NSView, NSTextFieldDelegate {
     init(model: EditorModel) {
         self.model = model
         super.init(frame: .zero)
+        wantsLayer = true
+        layer?.shadowColor = NSColor.black.cgColor
+        layer?.shadowRadius = 14
+        layer?.shadowOffset = CGSize(width: 0, height: -8)
         bag = model.objectWillChange.sink { [weak self] _ in
             DispatchQueue.main.async {
                 guard let self else { return }
@@ -101,14 +105,10 @@ final class CanvasView: NSView, NSTextFieldDelegate {
         ctx.scaleBy(x: f.zoom, y: f.zoom)
         ctx.interpolationQuality = .high
 
-        if !model.backdrop.enabled {
-            ctx.saveGState()
-            ctx.setShadow(offset: CGSize(width: 0, height: -8), blur: 28, color: NSColor.black.withAlphaComponent(0.28).cgColor)
-            ctx.setFillColor(NSColor.black.cgColor)
-            ctx.fill(CGRect(origin: .zero, size: out))
-            ctx.restoreGState()
-        }
-        Renderer.drawScene(ctx, model, draft: draft, shadowScale: f.zoom * backing)
+        // The picture's drop shadow is a GPU layer shadow with an explicit path (see updateShadow);
+        // blurring it on the CPU every frame was most of the redraw time.
+        updateShadow(CGRect(origin: f.origin, size: CGSize(width: out.width * f.zoom, height: out.height * f.zoom)))
+        Renderer.drawScene(ctx, model, draft: draft, shadowScale: f.zoom * backing, base: displayBase(pixelsPerImagePixel: f.zoom * backing))
 
         // Editing overlays, in image coordinates
         let ir = model.imageRect
@@ -157,6 +157,41 @@ final class CanvasView: NSView, NSTextFieldDelegate {
             Renderer.withFlippedNSContext(ctx) { label.draw(at: CGPoint(x: bg.minX + 7 * hair, y: bg.minY + 3 * hair)) }
         }
         ctx.restoreGState()
+    }
+
+    private var shadowRect: CGRect = .null
+
+    private func updateShadow(_ r: CGRect) {
+        guard let layer else { return }
+        let opacity: Float = model.backdrop.enabled ? 0 : 0.28
+        if r == shadowRect, layer.shadowOpacity == opacity { return }
+        shadowRect = r
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        layer.shadowOpacity = opacity
+        layer.shadowPath = CGPath(rect: r, transform: nil)
+        CATransaction.commit()
+    }
+
+    // MARK: Display-size base image
+
+    /// The screenshot scaled once to the size it's shown at. Rescaling the full 5K picture on every
+    /// frame cost ~18 ms per redraw; drawing a pre-scaled copy is a near 1:1 blit.
+    private var scaledBase: (key: Int, image: CGImage)?
+
+    private func displayBase(pixelsPerImagePixel s: CGFloat) -> CGImage? {
+        let base = model.base
+        guard s < 0.8 else { return nil } // already near full size: draw the original
+        let w = max(1, Int((CGFloat(base.width) * s).rounded())), h = max(1, Int((CGFloat(base.height) * s).rounded()))
+        let key = w * 100_000 + h
+        if let c = scaledBase, c.key == key { return c.image }
+        let cs = base.colorSpace ?? CGColorSpace(name: CGColorSpace.sRGB)!
+        guard let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0, space: cs,
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        ctx.interpolationQuality = .high
+        ctx.draw(base, in: CGRect(x: 0, y: 0, width: w, height: h))
+        guard let img = ctx.makeImage() else { return nil }
+        scaledBase = (key, img)
+        return img
     }
 
     // MARK: Mouse

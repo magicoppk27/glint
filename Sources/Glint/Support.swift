@@ -1,4 +1,5 @@
 import AppKit
+import AudioToolbox
 import SwiftUI
 import Carbon.HIToolbox
 import ImageIO
@@ -76,17 +77,38 @@ enum ImageStore {
 
     @discardableResult
     static func save(_ img: CGImage, scale: CGFloat, suffix: String = "") throws -> URL {
-        let folder = Prefs.saveFolder
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let base = "Glint \(nameFormatter.string(from: Date()))\(suffix)"
-        var url = folder.appendingPathComponent(base + ".png")
-        var n = 2
-        while FileManager.default.fileExists(atPath: url.path) {
-            url = folder.appendingPathComponent("\(base) \(n).png"); n += 1
-        }
+        let url = try reserveURL(suffix: suffix)
+        defer { reserved.remove(url.path) }
         guard let data = pngData(img, scale: scale) else { throw CocoaError(.fileWriteUnknown) }
         try data.write(to: url, options: .atomic)
         return url
+    }
+
+    /// Names claimed but not yet written (background saves), so two quick captures never collide.
+    nonisolated(unsafe) private static var reserved = Set<String>()
+    private static let reserveLock = NSLock()
+
+    static func reserveURL(suffix: String = "") throws -> URL {
+        let folder = Prefs.saveFolder
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        reserveLock.lock(); defer { reserveLock.unlock() }
+        let base = "Glint \(nameFormatter.string(from: Date()))\(suffix)"
+        var url = folder.appendingPathComponent(base + ".png")
+        var n = 2
+        while FileManager.default.fileExists(atPath: url.path) || reserved.contains(url.path) {
+            url = folder.appendingPathComponent("\(base) \(n).png"); n += 1
+        }
+        reserved.insert(url.path)
+        return url
+    }
+
+    /// Encodes and writes off the main thread; `done` runs on the main thread.
+    static func saveInBackground(_ img: CGImage, scale: CGFloat, to url: URL, done: @escaping @MainActor () -> Void) {
+        Task.detached(priority: .utility) {
+            if let data = pngData(img, scale: scale) { try? data.write(to: url, options: .atomic) }
+            reserveLock.lock(); reserved.remove(url.path); reserveLock.unlock()
+            await MainActor.run { done() }
+        }
     }
 
     static func write(_ img: CGImage, scale: CGFloat, to url: URL) throws {
@@ -101,14 +123,34 @@ enum ImageStore {
         }
     }
 
+    /// Puts the image on the clipboard at once. PNG/TIFF are promised and produced on demand;
+    /// the PNG is pre-encoded in the background so a paste is instant. (Encoding a 5K PNG+TIFF
+    /// synchronously took ~110 ms of main-thread time per capture.)
+    @MainActor
     static func copy(_ img: CGImage, scale: CGFloat) {
         let pb = NSPasteboard.general
         pb.clearContents()
+        let provider = ImagePasteProvider(image: img, scale: scale)
         let item = NSPasteboardItem()
-        if let png = pngData(img, scale: scale) { item.setData(png, forType: .png) }
-        let ns = NSImage(cgImage: img, size: CGSize(width: CGFloat(img.width) / scale, height: CGFloat(img.height) / scale))
-        if let tiff = ns.tiffRepresentation { item.setData(tiff, forType: .tiff) }
+        item.setDataProvider(provider, forTypes: [.png, .tiff])
         pb.writeObjects([item])
+        provider.changeCount = pb.changeCount
+        ImagePasteProvider.active = provider
+        Task.detached(priority: .userInitiated) {
+            let png = pngData(img, scale: scale)
+            await MainActor.run { provider.png = png }
+        }
+    }
+
+    /// Before quitting, swap a still-promised image for real PNG data so it stays pasteable.
+    @MainActor
+    static func resolvePendingCopy() {
+        guard let p = ImagePasteProvider.active, NSPasteboard.general.changeCount == p.changeCount,
+              let png = p.png ?? pngData(p.image, scale: p.scale) else { return }
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setData(png, forType: .png)
+        ImagePasteProvider.active = nil
     }
 
     static func copyText(_ s: String) {
@@ -150,17 +192,45 @@ enum ImageStore {
     }
 }
 
+/// Serves a copied image to whichever app pastes it.
+final class ImagePasteProvider: NSObject, NSPasteboardItemDataProvider {
+    @MainActor static var active: ImagePasteProvider?
+    let image: CGImage
+    let scale: CGFloat
+    var png: Data?
+    var changeCount = 0
+
+    init(image: CGImage, scale: CGFloat) { self.image = image; self.scale = scale }
+
+    func pasteboard(_ pasteboard: NSPasteboard?, item: NSPasteboardItem, provideDataForType type: NSPasteboard.PasteboardType) {
+        if type == .png {
+            if png == nil { png = ImageStore.pngData(image, scale: scale) }
+            if let png { item.setData(png, forType: .png) }
+        } else if type == .tiff {
+            let ns = NSImage(cgImage: image, size: CGSize(width: CGFloat(image.width) / scale, height: CGFloat(image.height) / scale))
+            if let tiff = ns.tiffRepresentation { item.setData(tiff, forType: .tiff) }
+        }
+    }
+
+    func pasteboardFinishedWithDataProvider(_ pasteboard: NSPasteboard) {
+        MainActor.assumeIsolated { if ImagePasteProvider.active === self { ImagePasteProvider.active = nil } }
+    }
+}
+
 // MARK: - Sound
 
 enum Sound {
-    static let shutter: NSSound? = {
+    /// Registered once. AudioServices plays without touching the main thread;
+    /// NSSound.play() blocked it 150+ ms per capture (and for much longer when Core Audio was busy).
+    static let shutterID: SystemSoundID? = {
         let p = "/System/Library/Components/CoreAudio.component/Contents/SharedSupport/SystemSounds/system/Screen Capture.aif"
-        return NSSound(contentsOfFile: p, byReference: true) ?? NSSound(named: "Pop")
+        var sid: SystemSoundID = 0
+        return AudioServicesCreateSystemSoundID(URL(fileURLWithPath: p) as CFURL, &sid) == noErr ? sid : nil
     }()
 
-    static func play() {
-        guard Prefs.playSound, let s = shutter else { return }
-        s.stop(); s.volume = 0.6; s.play()
+    static func play(force: Bool = false) {
+        guard force || Prefs.playSound, let sid = shutterID else { return }
+        DispatchQueue.global(qos: .userInitiated).async { AudioServicesPlaySystemSound(sid) }
     }
 }
 
