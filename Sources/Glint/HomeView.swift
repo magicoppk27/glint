@@ -126,6 +126,7 @@ struct HomeView: View {
                     LazyVGrid(columns: columns, spacing: 12) {
                         ForEach(CaptureKind.allCases) { ActionTile(kind: $0) }
                     }
+                    PresentSection()
                     ClipboardSection(history: ClipboardHistory.shared)
                     recentHeader
                     let shown = visible
@@ -597,6 +598,7 @@ struct SettingsView: View {
     var body: some View {
         TabView {
             GeneralSettings().tabItem { Label("General", systemImage: "gearshape") }
+            PresentSettings().tabItem { Label("Presenting", systemImage: "cursorarrow.rays") }
             ShortcutSettings().tabItem { Label("Shortcuts", systemImage: "command") }
             AboutSettings().tabItem { Label("About", systemImage: "sparkles") }
         }

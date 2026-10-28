@@ -77,13 +77,19 @@ struct Hotkey: Codable, Equatable {
 enum HotkeyAction: Hashable, Identifiable {
     case capture(CaptureKind)
     case clipboard
+    case present(PresentFeature)
+    case presentOff
 
-    static var all: [HotkeyAction] { CaptureKind.allCases.map { .capture($0) } + [.clipboard] }
+    static var all: [HotkeyAction] {
+        CaptureKind.allCases.map { .capture($0) } + [.clipboard] + PresentFeature.allCases.map { .present($0) } + [.presentOff]
+    }
 
     var id: String {
         switch self {
         case let .capture(k): k.rawValue
         case .clipboard: "clipboard"
+        case let .present(f): "present.\(f.rawValue)"
+        case .presentOff: "present.off"
         }
     }
 
@@ -91,6 +97,8 @@ enum HotkeyAction: Hashable, Identifiable {
         switch self {
         case let .capture(k): k.title
         case .clipboard: "Clipboard History Picker"
+        case let .present(f): f.title
+        case .presentOff: "Turn Off Presenting Tools"
         }
     }
 
@@ -98,6 +106,8 @@ enum HotkeyAction: Hashable, Identifiable {
         switch self {
         case let .capture(k): k.symbol
         case .clipboard: "doc.on.clipboard"
+        case let .present(f): f.symbol
+        case .presentOff: "power"
         }
     }
 
@@ -113,6 +123,8 @@ enum HotkeyAction: Hashable, Identifiable {
         case .capture(.scroll): return Hotkey(keyCode: UInt32(kVK_ANSI_0), modifiers: cs)
         case .capture(.delayed): return nil
         case .clipboard: return Hotkey(keyCode: UInt32(kVK_ANSI_V), modifiers: UInt32(cmdKey | controlKey))
+        case let .present(f): return Hotkey(keyCode: f.defaultKey, modifiers: UInt32(controlKey | optionKey))
+        case .presentOff: return Hotkey(keyCode: UInt32(kVK_ANSI_X), modifiers: UInt32(controlKey | optionKey))
         }
     }
 
@@ -120,7 +132,15 @@ enum HotkeyAction: Hashable, Identifiable {
         switch self {
         case let .capture(k): AppController.shared.run(k)
         case .clipboard: ClipboardPicker.toggle()
+        case let .present(f): Presenter.shared.hotkeyPressed(f)
+        case .presentOff: Presenter.shared.turnOffAll()
         }
+    }
+
+    /// Only presenting tools care about the key going up (hold-to-show).
+    @MainActor var release: (() -> Void)? {
+        if case let .present(f) = self { return { Presenter.shared.hotkeyReleased(f) } }
+        return nil
     }
 }
 
@@ -181,18 +201,21 @@ final class HotkeyStore: ObservableObject {
 
     /// (Re)registers every shortcut with the system.
     func apply() {
-        HotKeyCenter.shared.unregisterAll()
+        HotKeyCenter.shared.unregister(Self.ids)
         var bad: Set<String> = []
         for (i, a) in HotkeyAction.all.enumerated() {
             guard let hk = hotkey(a) else { continue }
-            let ok = HotKeyCenter.shared.register(keyCode: hk.keyCode, modifiers: hk.modifiers, id: UInt32(i + 1)) { a.perform() }
+            let ok = HotKeyCenter.shared.register(keyCode: hk.keyCode, modifiers: hk.modifiers, id: UInt32(i + 1), onRelease: a.release) { a.perform() }
             if !ok { bad.insert(a.id) }
         }
         failed = bad
     }
 
     /// While recording, global shortcuts are lifted so the keys reach the recorder.
-    func suspend() { HotKeyCenter.shared.unregisterAll() }
+    func suspend() { HotKeyCenter.shared.unregister(Self.ids) }
+
+    /// Carbon ids owned by the store; temporary keys (e.g. the Zoom Lens's) use ids above this range.
+    static let ids: ClosedRange<UInt32> = 1...99
 }
 
 // MARK: - Recorder

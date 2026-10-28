@@ -239,28 +239,34 @@ enum Sound {
 final class HotKeyCenter {
     static let shared = HotKeyCenter()
     fileprivate var handlers: [UInt32: () -> Void] = [:]
+    fileprivate var releaseHandlers: [UInt32: () -> Void] = [:]
     private var refs: [UInt32: EventHotKeyRef] = [:]
     private var installed = false
 
     func install() {
         guard !installed else { return }
         installed = true
-        var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
+        var specs = [EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed)),
+                     EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyReleased))]
         InstallEventHandler(GetApplicationEventTarget(), { _, event, _ in
             var hk = EventHotKeyID()
             GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
                               nil, MemoryLayout<EventHotKeyID>.size, nil, &hk)
             let id = hk.id
-            DispatchQueue.main.async { HotKeyCenter.shared.handlers[id]?() }
+            let released = GetEventKind(event) == UInt32(kEventHotKeyReleased)
+            DispatchQueue.main.async {
+                if released { HotKeyCenter.shared.releaseHandlers[id]?() } else { HotKeyCenter.shared.handlers[id]?() }
+            }
             return noErr
-        }, 1, &spec, nil, nil)
+        }, 2, &specs, nil, nil)
     }
 
     /// Returns false when macOS refuses the combination (usually: another app owns it).
     @discardableResult
-    func register(keyCode: UInt32, modifiers: UInt32, id: UInt32, _ handler: @escaping () -> Void) -> Bool {
+    func register(keyCode: UInt32, modifiers: UInt32, id: UInt32, onRelease: (() -> Void)? = nil, _ handler: @escaping () -> Void) -> Bool {
         if let old = refs.removeValue(forKey: id) { UnregisterEventHotKey(old) }
         handlers[id] = handler
+        releaseHandlers[id] = onRelease
         var ref: EventHotKeyRef?
         let hkID = EventHotKeyID(signature: OSType(0x474C_4E54), id: id) // 'GLNT'
         let status = RegisterEventHotKey(keyCode, modifiers, hkID, GetApplicationEventTarget(), 0, &ref)
@@ -269,10 +275,15 @@ final class HotKeyCenter {
         return true
     }
 
-    func unregisterAll() {
-        refs.values.forEach { UnregisterEventHotKey($0) }
-        refs.removeAll()
+    /// Removes every registration in `ids` (all of them when nil).
+    func unregister(_ ids: ClosedRange<UInt32>? = nil) {
+        for (id, ref) in refs where ids?.contains(id) ?? true {
+            UnregisterEventHotKey(ref)
+            refs[id] = nil
+        }
     }
+
+    func unregisterAll() { unregister() }
 }
 
 // MARK: - Helpers
@@ -292,6 +303,13 @@ extension NSColor {
         self.init(srgbRed: CGFloat((hex >> 16) & 0xFF) / 255, green: CGFloat((hex >> 8) & 0xFF) / 255,
                   blue: CGFloat(hex & 0xFF) / 255, alpha: alpha)
     }
+    /// "#RRGGBB" → color; nil for anything else.
+    convenience init?(hexString: String) {
+        let s = hexString.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "#", with: "")
+        guard s.count == 6, let v = UInt32(s, radix: 16) else { return nil }
+        self.init(hex: v)
+    }
+
     var hexString: String {
         guard let c = usingColorSpace(.sRGB) else { return "#000000" }
         return String(format: "#%02X%02X%02X", Int(round(c.redComponent * 255)), Int(round(c.greenComponent * 255)), Int(round(c.blueComponent * 255)))
