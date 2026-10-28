@@ -6,37 +6,42 @@ import SwiftUI
 // the screen, keystrokes). They live next to the capture tools and share Glint's hotkeys and Settings.
 
 enum PresentFeature: String, CaseIterable, Identifiable {
-    case halo
+    case halo, lens
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .halo: "Cursor Highlight"
+        case .lens: "Zoom Lens"
         }
     }
 
     var subtitle: String {
         switch self {
         case .halo: "Halo follows the mouse, flashes on clicks"
+        case .lens: "Live magnifier · tap to toggle, hold to peek"
         }
     }
 
     var symbol: String {
         switch self {
         case .halo: "cursorarrow.rays"
+        case .lens: "plus.magnifyingglass"
         }
     }
 
     var colors: [Color] {
         switch self {
         case .halo: [Color(hex: 0xF5A300), Color(hex: 0xFFD60A)]
+        case .lens: [Color(hex: 0x2F80ED), Color(hex: 0x56CCF2)]
         }
     }
 
     var defaultKey: UInt32 {
         switch self {
         case .halo: UInt32(kVK_ANSI_C)
+        case .lens: UInt32(kVK_ANSI_M)
         }
     }
 
@@ -65,13 +70,18 @@ final class Presenter: ObservableObject {
         if on { active.insert(f) } else { active.remove(f) }
         switch f {
         case .halo: on ? CursorHalo.shared.show() : CursorHalo.shared.hide()
+        case .lens: if on { if !ZoomLens.shared.show() { active.remove(f) } } else { ZoomLens.shared.hide() }
         }
         Prefs.d.set(active.filter(\.remembered).map(\.rawValue), forKey: key)
     }
 
-    func hotkeyPressed(_ f: PresentFeature) { toggle(f) }
+    func hotkeyPressed(_ f: PresentFeature) {
+        if f == .lens { ZoomLens.shared.keyDown() } else { toggle(f) }
+    }
 
-    func hotkeyReleased(_ f: PresentFeature) {}
+    func hotkeyReleased(_ f: PresentFeature) {
+        if f == .lens { ZoomLens.shared.keyUp() }
+    }
 
     func turnOffAll() { PresentFeature.allCases.forEach { set($0, false) } }
 
@@ -199,6 +209,8 @@ struct PresentSettings: View {
     @AppStorage("haloColor") private var haloColor = CursorHalo.Defaults.color
     @AppStorage("haloLeft") private var haloLeft = CursorHalo.Defaults.left
     @AppStorage("haloRight") private var haloRight = CursorHalo.Defaults.right
+    @AppStorage("lensZoom") private var lensZoom = ZoomLens.Defaults.zoom
+    @AppStorage("lensSize") private var lensSize = ZoomLens.Defaults.size
 
     var body: some View {
         Form {
@@ -224,6 +236,16 @@ struct PresentSettings: View {
                 Text("Cursor highlight")
             } footer: {
                 Text("Shown on screen and in other apps' recordings, never in Glint's own screenshots.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+            }
+            Section {
+                PresentToggleRow(feature: .lens)
+                Slider(value: $lensZoom, in: ZoomLens.zoomRange) { Text("Zoom  \(String(format: "%.1f×", lensZoom))") }
+                Slider(value: $lensSize, in: 140...480) { Text("Size") }
+            } header: {
+                Text("Zoom Lens")
+            } footer: {
+                Text("Tap the shortcut to toggle, or hold it to show the lens only while held. While it shows: ⌃⌥= and ⌃⌥− zoom, esc closes. Uses Screen Recording; nothing is saved.")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
             }
         }

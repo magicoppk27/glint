@@ -258,7 +258,7 @@ final class AppController {
 
     // MARK: Permission
 
-    private func ensurePermission() -> Bool {
+    func ensurePermission() -> Bool {
         if CGPreflightScreenCaptureAccess() { return true }
         CGRequestScreenCaptureAccess()
         if CGPreflightScreenCaptureAccess() { return true }

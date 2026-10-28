@@ -15,6 +15,7 @@ enum DebugPresent {
         Task { @MainActor in
             await haloTest(dir)
             await hotkeyReleaseTest()
+            await lensTest(dir)
             Presenter.shared.turnOffAll()
             Prefs.d.set(saved, forKey: "presentingOn")
             print("PRESENT done")
@@ -75,6 +76,42 @@ enum DebugPresent {
         Presenter.shared.turnOffAll()
         await wait(0.1)
         check("turn off all hides halo", !CursorHalo.shared.isShowing && Prefs.d.stringArray(forKey: "presentingOn") == [])
+    }
+
+    // MARK: Zoom Lens
+
+    static func lensTest(_ dir: String) async {
+        let f = CGRect(x: 0, y: 0, width: 1000, height: 500)
+        let mid = ZoomLens.crop(mouse: CGPoint(x: 500, y: 250), display: f, lens: 200, zoom: 2)
+        let corner = ZoomLens.crop(mouse: CGPoint(x: 0, y: 0), display: f, lens: 200, zoom: 2)
+        let second = ZoomLens.crop(mouse: CGPoint(x: 1500, y: 250), display: f.offsetBy(dx: 1000, dy: 0), lens: 200, zoom: 2)
+        check("lens crop math", mid == CGRect(x: 0.45, y: 0.4, width: 0.1, height: 0.2) && corner.origin == .zero && second == mid,
+              "\(mid) \(corner) \(second)")
+
+        let lens = ZoomLens.shared
+        lens.keyDown(); await wait(0.05); lens.keyUp()
+        await wait(1.5)
+        check("lens tap opens", lens.isShowing && Presenter.shared.isOn(.lens))
+        check("lens receives frames", lens.framesShown > 10, "\(lens.framesShown) frames in 1.5 s")
+        let panel = NSApp.windows.first { $0.identifier == GlintChrome.id && $0.sharingType == .none && $0.isVisible }
+        check("lens leaves itself out", panel.map { lens.excludedWindowIDs.contains(CGWindowID($0.windowNumber)) } ?? false,
+              "excluded=\(lens.excludedWindowIDs)")
+        if let img = lens.snapshot() {
+            let rep = NSBitmapImageRep(cgImage: img)
+            try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: "\(dir)/lens-view.png"))
+            check("lens snapshot", img.width > 50, "\(img.width)x\(img.height) px")
+        } else { check("lens snapshot", false) }
+        let before = Prefs.d.object(forKey: "lensZoom")
+        Prefs.d.set(4.0, forKey: "lensZoom"); await wait(0.1)
+        Prefs.d.set(before, forKey: "lensZoom")
+        lens.keyDown(); await wait(0.05); lens.keyUp()
+        await wait(0.2)
+        check("lens second tap closes", !lens.isShowing && !Presenter.shared.isOn(.lens))
+
+        lens.keyDown(); await wait(0.6)
+        let heldOpen = lens.isShowing
+        lens.keyUp(); await wait(0.2)
+        check("lens hold peeks, release closes", heldOpen && !lens.isShowing)
     }
 
     // MARK: Hotkeys
