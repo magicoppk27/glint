@@ -307,8 +307,11 @@ struct Background: View {
     var body: some View {
         ZStack {
             WindowBackdrop()
-            RadialGradient(colors: [Color(hex: 0x7C5CFF).opacity(0.16), .clear], center: .topLeading, startRadius: 0, endRadius: 520)
-            RadialGradient(colors: [Color(hex: 0xEC4899).opacity(0.10), .clear], center: .topTrailing, startRadius: 0, endRadius: 460)
+            Group {
+                RadialGradient(colors: [Color(hex: 0x7C5CFF).opacity(0.16), .clear], center: .topLeading, startRadius: 0, endRadius: 520)
+                RadialGradient(colors: [Color(hex: 0xEC4899).opacity(0.10), .clear], center: .topTrailing, startRadius: 0, endRadius: 460)
+            }
+            .hiddenInClearGlass()
         }
         .ignoresSafeArea()
     }
@@ -492,7 +495,7 @@ struct TextTile: View {
             }
             .padding(12)
             .frame(height: 140)
-            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.background.opacity(0.8)))
+            .cardFill()
             .overlay(TileBorder(hover: hover, selected: selected))
             .overlay(alignment: .topLeading) { if selecting { SelectBadge(selected: selected).offset(x: -6, y: -6) } }
             .overlay(alignment: .bottomTrailing) {

@@ -177,7 +177,7 @@ struct DrawToolbar: View {
         }
         .padding(.horizontal, 8)
         .frame(height: 44)
-        .overlaySurface(Capsule())
+        .panelSurface(Capsule())
         .padding(10) // room for the shadow
         .fixedSize()
     }

@@ -49,7 +49,7 @@ struct EditorView: View {
     var body: some View {
         ZStack(alignment: .topLeading) {
             WindowBackdrop(solid: .underPageBackgroundColor)
-            DotGrid().opacity(0.5)
+            DotGrid().opacity(0.5).hiddenInClearGlass()
             CanvasRepresentable(model: model)
 
             // Top row: style controls + actions

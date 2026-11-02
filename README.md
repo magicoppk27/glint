@@ -54,6 +54,7 @@ The halo, keystrokes and lens never appear in Glint's own screenshots; drawings 
 
 Pick a theme from the palette button on the Home window, the menu bar icon → Theme, View → Theme, or Settings → Appearance:
 
+- **Clear Glass** (default) — the whole window is one sheet of glass, like the macOS 27 menus (macOS 26+).
 - **Classic** — frosted materials and soft shadows.
 - **Liquid Glass** — Apple's glass on toolbars and buttons, with a see-through window (macOS 26+).
 - **Glint Glass** — violet-tinted glass with a light rim, on the Home tiles too (macOS 26+).

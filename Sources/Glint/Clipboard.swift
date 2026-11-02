@@ -348,7 +348,7 @@ struct ClipCard: View {
         }
         .padding(10)
         .frame(width: 210, height: 92)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.background.opacity(hover ? 1 : 0.8)))
+        .cardFill(hover: hover)
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(hover ? Color.accentColor.opacity(0.7) : .primary.opacity(0.07), lineWidth: hover ? 2 : 1))
         .contentShape(Rectangle())
         .onHover { h in withAnimation(.easeOut(duration: 0.12)) { hover = h } }

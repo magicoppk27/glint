@@ -11,6 +11,9 @@ enum DebugDesign {
         let savedLook = Prefs.d.string(forKey: GlassLook.key)
         let savedLayout = Prefs.d.string(forKey: "settingsLayout")
         let savedPane = Prefs.d.string(forKey: "settingsPane")
+        // GLINT_DESIGN_LOOKS=clear,liquid limits the run to those looks.
+        let only = ProcessInfo.processInfo.environment["GLINT_DESIGN_LOOKS"]?.split(separator: ",").compactMap { GlassLook(rawValue: String($0)) }
+        let looks = only?.isEmpty == false ? only! : GlassLook.allCases
         Task { @MainActor in
             await wait(1.5)
             NSApp.activate(ignoringOtherApps: true)
@@ -18,7 +21,7 @@ enum DebugDesign {
             for dark in [false, true] {
                 NSApp.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
                 let mode = dark ? "dark" : "light"
-                for look in GlassLook.allCases {
+                for look in looks {
                     Prefs.d.set(look.rawValue, forKey: GlassLook.key)
                     await wait(0.4)
                     if let home = HomeWindow.window {
@@ -58,7 +61,7 @@ enum DebugDesign {
                     }
                 }
                 // Settings: both layouts, on Appearance, in the default look.
-                Prefs.d.set(GlassLook.liquid.rawValue, forKey: GlassLook.key)
+                Prefs.d.set((looks.count == 1 ? looks[0] : .standard).rawValue, forKey: GlassLook.key)
                 for layout in ["tabs", "sidebar"] {
                     for pane in [SettingsPane.appearance, .permissions] {
                         Prefs.d.set(layout, forKey: "settingsLayout")

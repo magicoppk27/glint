@@ -42,6 +42,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
 
 /// Settings, as toolbar tabs (the Mac default) or as a sidebar like System Settings.
 struct SettingsView: View {
+    @AppStorage(GlassLook.key) private var look = GlassLook.standard.rawValue
     @AppStorage("settingsLayout") private var layout = "tabs"
     @AppStorage("settingsPane") private var pane = SettingsPane.general.rawValue
 
@@ -49,7 +50,15 @@ struct SettingsView: View {
         Binding(get: { SettingsPane(rawValue: pane) ?? .general }, set: { pane = ($0 ?? .general).rawValue })
     }
 
+    private var clear: Bool { GlassLook.supported && look == GlassLook.clear.rawValue }
+
     var body: some View {
+        panes
+            .scrollContentBackground(clear ? .hidden : .automatic)
+            .background(clear ? WindowBackdrop() : nil)
+    }
+
+    @ViewBuilder private var panes: some View {
         if layout == "sidebar" {
             NavigationSplitView {
                 List(SettingsPane.allCases, selection: selection) { p in
@@ -75,7 +84,7 @@ struct SettingsView: View {
 // MARK: - Appearance
 
 struct AppearanceSettings: View {
-    @AppStorage(GlassLook.key) private var look = GlassLook.liquid.rawValue
+    @AppStorage(GlassLook.key) private var look = GlassLook.standard.rawValue
     @AppStorage("settingsLayout") private var layout = "tabs"
 
     var body: some View {
@@ -153,7 +162,9 @@ private struct PreviewSurface: ViewModifier {
     let look: GlassLook
     func body(content: Content) -> some View {
         let shape = Capsule()
-        if #available(macOS 26, *), look != .classic {
+        if #available(macOS 26, *), look == .clear {
+            content.glassEffect(.clear, in: shape)
+        } else if #available(macOS 26, *), look != .classic {
             content.glassEffect(look == .glint ? .regular.tint(Color(hex: 0x7C5CFF).opacity(0.25)) : .regular, in: shape)
         } else {
             content.background(.regularMaterial, in: shape).shadow(color: .black.opacity(0.15), radius: 5, y: 2)

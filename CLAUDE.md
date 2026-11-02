@@ -72,7 +72,12 @@ Goal of this file: "clone my glint repo, build and install it" should work in on
 - Screen Pointer (local.screenpointer.ScreenPointer) uses the same ⌃⌥ defaults — quit it, or both apps fight over the keys.
 
 ## Themes (Glass.swift)
-- `GlassLook` (classic, liquid, glint) in UserDefaults `glassLook`; default liquid; macOS < 26 always classic.
+- `GlassLook` (classic, liquid, glint, clear) in UserDefaults `glassLook`; default `GlassLook.standard` = clear; macOS < 26 always classic.
+  Clear Glass = macOS 27 menu look: the whole window is an `NSGlassEffectView` (window made non-opaque by `WindowOpacity`),
+  controls on it are flat `.primary` fills (`controlSurface`, `tileSurface`, `cardFill`), no glass on glass; `panelSurface`
+  gives standalone panels (draw toolbar) light system glass; `hiddenInClearGlass()` drops tints, dot grid and glows.
+- `GLINT_DESIGN_LOOKS=clear` limits a `GLINT_DESIGN` run to some looks. On macOS 27 the first direct screen capture shows
+  a "bypass the system private window picker" prompt that the user must Allow.
   Surfaces go through `controlSurface`, `overlaySurface`, `tileSurface`, `glassGroup`, `PillButtonStyle` and
   `WindowBackdrop` (behind-window blur for the glass looks) — don't add `.regularMaterial` backgrounds directly.
 - Pickers: Home `ThemeButton`, `ThemeMenu` in the menu bar extra and View menu, Settings → Appearance (`LookCard`).
