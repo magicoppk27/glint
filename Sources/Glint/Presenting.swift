@@ -73,7 +73,11 @@ final class Presenter: ObservableObject {
         Binding(get: { self.isOn(f) }, set: { self.set(f, $0) })
     }
 
-    func toggle(_ f: PresentFeature) { set(f, !isOn(f)) }
+    func toggle(_ f: PresentFeature) {
+        // "On" but not on screen (its display went away): show it again instead of turning it off unseen.
+        if f == .draw, isOn(f), !ScreenDraw.shared.isVisible { set(f, false); set(f, true); return }
+        set(f, !isOn(f))
+    }
 
     func set(_ f: PresentFeature, _ on: Bool) {
         guard on != isOn(f) else { return }

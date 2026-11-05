@@ -20,6 +20,23 @@ final class ScreenDraw {
     let state = DrawState()
 
     var isShowing: Bool { panel != nil }
+    /// Showing on a display that still exists.
+    var isVisible: Bool {
+        guard let p = panel, p.isVisible else { return false }
+        return NSScreen.screens.contains { $0.frame == p.frame }
+    }
+
+    private var screensObserver: NSObjectProtocol?
+
+    private init() {
+        // A display unplugged, slept or rearranged takes the drawing's screen with it: end drawing cleanly.
+        screensObserver = NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
+                                                                 object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated {
+                if ScreenDraw.shared.isShowing, !ScreenDraw.shared.isVisible { Presenter.shared.set(.draw, false) }
+            }
+        }
+    }
 
     func show() {
         guard panel == nil else { return }

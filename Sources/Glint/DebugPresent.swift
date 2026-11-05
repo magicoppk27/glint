@@ -191,6 +191,24 @@ enum DebugPresent {
         canvas.keyDown(with: esc)
         await wait(0.1)
         check("esc stops drawing", !d.isShowing && !Presenter.shared.isOn(.draw) && toolbar?.isVisible == false)
+
+        // Its display goes away (unplugged, slept): the panel ends up off every screen.
+        func openOffScreen() async -> NSWindow? {
+            Presenter.shared.set(.draw, true)
+            await wait(0.3)
+            let p = NSApp.windows.first { $0 is DrawPanel && $0.isVisible }
+            p?.setFrame(p!.frame.offsetBy(dx: 100_000, dy: 0), display: false)
+            return p
+        }
+        _ = await openOffScreen()
+        NotificationCenter.default.post(name: NSApplication.didChangeScreenParametersNotification, object: NSApp)
+        await wait(0.1)
+        check("draw ends when its display goes away", !d.isShowing && !Presenter.shared.isOn(.draw))
+        _ = await openOffScreen() // and if the notice never came, the shortcut brings it back instead of turning it off unseen
+        Presenter.shared.toggle(.draw)
+        await wait(0.3)
+        check("shortcut reopens a lost drawing", d.isVisible && Presenter.shared.isOn(.draw))
+        Presenter.shared.set(.draw, false)
     }
 
     // MARK: Keystrokes
@@ -234,6 +252,70 @@ enum DebugPresent {
         await wait(KeystrokeLog.lifetime + 0.5)
         check("keys overlay clears itself", Keystrokes.shared.model.log.entries.isEmpty)
         Presenter.shared.set(.keys, false)
+    }
+
+    // MARK: Real clicks
+
+    /// GLINT_DRAW_CLICK_TEST=1: posts a real drag (needs Accessibility) onto the drawing surface, over the empty
+    /// title bar of Glint's Home window, so a click that leaks through can't touch another app.
+    static func drawClickTest() {
+        Task { @MainActor in
+            await wait(1.5)
+            HomeWindow.show()
+            await wait(0.5)
+            guard let home = HomeWindow.window, AXIsProcessTrusted() else { print("CLICK FAIL setup ax=\(AXIsProcessTrusted())"); NSApp.terminate(nil); return }
+            let mouse = NSEvent.mouseLocation
+            let p = CGPoint(x: home.frame.midX - 60, y: home.frame.maxY - 14) // Cocoa coordinates
+            let primaryH = NSScreen.screens[0].frame.height
+            func cg(_ q: CGPoint) -> CGPoint { CGPoint(x: q.x, y: primaryH - q.y) }
+            CGWarpMouseCursorPosition(cg(p))
+            await wait(0.2)
+            Presenter.shared.set(.draw, true)
+            await wait(0.5)
+            guard let m = ScreenDraw.shared.model else { print("CLICK FAIL no draw"); NSApp.terminate(nil); return }
+            m.tool = .pen
+            let panel = NSApp.windows.first { $0 is DrawPanel }
+            print("CLICK info panel alpha=\(panel?.backgroundColor.alphaComponent ?? -1) ignores=\(panel?.ignoresMouseEvents ?? true) key=\(panel?.isKeyWindow ?? false) level=\(panel?.level.rawValue ?? 0)")
+            let hit = NSWindow.windowNumber(at: p, belowWindowWithWindowNumber: 0)
+            print("CLICK info windowAtPoint=\(hit) drawPanel=\(panel?.windowNumber ?? -1) home=\(home.windowNumber)")
+            let src = CGEventSource(stateID: .hidSystemState)
+            func post(_ t: CGEventType, _ q: CGPoint) {
+                CGEvent(mouseEventSource: src, mouseType: t, mouseCursorPosition: cg(q), mouseButton: .left)?.post(tap: .cghidEventTap)
+            }
+            post(.leftMouseDown, p)
+            for i in 1...10 { await wait(0.02); post(.leftMouseDragged, CGPoint(x: p.x + CGFloat(i) * 12, y: p.y)) }
+            post(.leftMouseUp, CGPoint(x: p.x + 120, y: p.y))
+            await wait(0.4)
+            print("CLICK \(m.annotations.count == 1 ? "PASS" : "FAIL") real drag drew \(m.annotations.count) shape(s)")
+            Presenter.shared.set(.draw, false)
+            CGWarpMouseCursorPosition(cg(mouse))
+            NSApp.terminate(nil)
+        }
+    }
+
+    /// GLINT_DRAW_KEY_TEST=1: presses the real Draw on Screen shortcut and checks that drawing opens.
+    static func drawKeyTest() {
+        Task { @MainActor in
+            await wait(1.5)
+            guard let hk = HotkeyStore.shared.hotkey(.present(.draw)) else { print("KEY FAIL no shortcut"); NSApp.terminate(nil); return }
+            print("KEY info shortcut=\(hk.display) failed=\(HotkeyStore.shared.failed.sorted())")
+            let src = CGEventSource(stateID: .hidSystemState)
+            var flags: CGEventFlags = []
+            if hk.modifiers & UInt32(controlKey) != 0 { flags.insert(.maskControl) }
+            if hk.modifiers & UInt32(optionKey) != 0 { flags.insert(.maskAlternate) }
+            if hk.modifiers & UInt32(shiftKey) != 0 { flags.insert(.maskShift) }
+            if hk.modifiers & UInt32(cmdKey) != 0 { flags.insert(.maskCommand) }
+            for down in [true, false] {
+                let e = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(hk.keyCode), keyDown: down)
+                e?.flags = flags
+                e?.post(tap: .cghidEventTap)
+                await wait(0.1)
+            }
+            await wait(0.6)
+            print("KEY \(ScreenDraw.shared.isShowing ? "PASS" : "FAIL") shortcut opens drawing")
+            Presenter.shared.set(.draw, false)
+            NSApp.terminate(nil)
+        }
     }
 
     // MARK: Hotkeys

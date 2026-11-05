@@ -193,6 +193,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if ProcessInfo.processInfo.environment["GLINT_PERF"] != nil { DebugSnapshot.perfTest() }
         if let dir = ProcessInfo.processInfo.environment["GLINT_PRESENT_TEST"] { DebugPresent.run(into: dir) }
         if let dir = ProcessInfo.processInfo.environment["GLINT_DESIGN"] { DebugDesign.run(into: dir) }
+        if ProcessInfo.processInfo.environment["GLINT_DRAW_CLICK_TEST"] != nil { DebugPresent.drawClickTest() }
+        if ProcessInfo.processInfo.environment["GLINT_DRAW_KEY_TEST"] != nil { DebugPresent.drawKeyTest() }
         // GLINT_CLOSE_HOME=1: close the home window shortly after launch (reopen testing).
         if ProcessInfo.processInfo.environment["GLINT_CLOSE_HOME"] != nil {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
