@@ -45,7 +45,7 @@ For demos and screen recordings (menu bar → Presenting, the Home window, or Se
 
 - **Cursor highlight** — a halo around the pointer that flashes red/blue on left/right clicks and dims when the mouse rests.
 - **Show keystrokes** — shortcuts and typing appear as chips near the bottom of the screen and fade after 2 s.
-- **Draw on screen** — the editor's own tools (arrow, box, pen, highlighter, text, steps, Box + Step, spotlight) on the live screen. ⌘Z undo, ⌘⌫ clear, esc or right-click to stop; the hand button passes clicks through, the camera button captures the screen with your drawing into the editor.
+- **Draw on screen** — on every monitor at once; the toolbar follows the screen you draw on. The editor's own tools (arrow, box, pen, highlighter, text, steps, Box + Step, spotlight) on the live screen. ⌘Z undo, ⌘⌫ clear, esc or right-click to stop; the hand button passes clicks through, the camera button captures the screen with your drawing into the editor.
 - **Zoom lens** — a live magnifier that follows the pointer. Tap ⌃⌥M to toggle, hold it to peek; ⌃⌥= / ⌃⌥− zoom, esc closes.
 
 The halo, keystrokes and lens never appear in Glint's own screenshots; drawings do.

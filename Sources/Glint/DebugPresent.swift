@@ -126,12 +126,15 @@ enum DebugPresent {
         Presenter.shared.set(.draw, true)
         await wait(0.3)
         let d = ScreenDraw.shared
-        guard let m = d.model, let panel = NSApp.windows.first(where: { $0 is DrawPanel && $0.isVisible }),
+        guard let m = d.model, let panel = d.panels.first(where: { ($0 as? DrawPanel)?.model === m }),
               let canvas = panel.contentView as? CanvasView, let screen = panel.screen else {
             check("draw opens", false); return
         }
         check("draw opens", panel.frame == screen.frame && panel.isKeyWindow && panel.identifier != GlintChrome.id,
               "key=\(panel.isKeyWindow) frame=\(panel.frame)")
+        check("draw covers every display", d.panels.count == NSScreen.screens.count
+              && NSScreen.screens.allSatisfy { s in d.panels.contains { $0.frame == s.frame && $0.isVisible } },
+              "\(d.panels.count) surfaces, \(NSScreen.screens.count) displays")
         let toolbar = NSApp.windows.first { $0.identifier == GlintChrome.id && $0.contentView is NSHostingView<DrawToolbar> }
         check("draw toolbar is chrome", toolbar?.isVisible == true && (toolbar?.frame.width ?? 0) > 600, "\(toolbar?.frame ?? .zero)")
         if let toolbar { DebugSnapshot.save(toolbar, "\(dir)/draw-toolbar.png") }
@@ -177,10 +180,27 @@ enum DebugPresent {
             check("drawing appears in captures", (c?.redComponent ?? 0) > 0.8 && (c?.greenComponent ?? 1) < 0.4, "\(c?.hexString ?? "nil")")
         } else { check("drawing appears in captures", false, "no capture") }
 
+        // Another monitor: the toolbar follows, the style is shared, Clear All empties every screen.
+        if let other = d.panels.first(where: { $0 !== panel }) as? DrawPanel, let om = other.model {
+            other.makeKey()
+            await wait(0.2)
+            let followed = d.model === om && (toolbar.map { other.frame.intersects($0.frame) } ?? false)
+            check("toolbar follows the screen you draw on", followed)
+            om.colorIndex = 3
+            om.tool = .rect
+            await wait(0.1)
+            check("style shared by every screen", m.colorIndex == 3 && m.tool == .rect)
+            om.annotations = [Annotation(kind: .rect, start: .zero, end: CGPoint(x: 20, y: 20), color: .red, width: 2)]
+            panel.makeKey()
+            await wait(0.2)
+            check("toolbar comes back", d.model === m)
+        } else {
+            print("PRESENT SKIP multi-monitor checks — one display")
+        }
         m.undo()
         check("draw undo (box + step is one step)", m.annotations.count == 2)
-        m.clearAll()
-        check("draw clear", m.annotations.isEmpty)
+        d.clearAll()
+        check("draw clear (every screen)", d.panels.allSatisfy { (($0 as? DrawPanel)?.model?.annotations.isEmpty) ?? true })
         d.setClickThrough(true)
         check("draw click-through", panel.ignoresMouseEvents)
         d.setClickThrough(false)
@@ -196,9 +216,8 @@ enum DebugPresent {
         func openOffScreen() async -> NSWindow? {
             Presenter.shared.set(.draw, true)
             await wait(0.3)
-            let p = NSApp.windows.first { $0 is DrawPanel && $0.isVisible }
-            p?.setFrame(p!.frame.offsetBy(dx: 100_000, dy: 0), display: false)
-            return p
+            for p in d.panels { p.setFrame(p.frame.offsetBy(dx: 100_000, dy: 0), display: false) }
+            return d.panels.first
         }
         _ = await openOffScreen()
         NotificationCenter.default.post(name: NSApplication.didChangeScreenParametersNotification, object: NSApp)

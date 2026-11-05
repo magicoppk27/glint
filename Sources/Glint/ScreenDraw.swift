@@ -3,8 +3,9 @@ import SwiftUI
 
 /// Draw on the live screen with the editor's own tools and renderer.
 ///
-/// A see-through window covers the screen under the mouse and hosts a `CanvasView` in screen mode
-/// (no picture, one image pixel per screen pixel). It is a real Glint window, not chrome, so
+/// A see-through window covers every display and hosts a `CanvasView` in screen mode (no picture, one image
+/// pixel per screen pixel), each with its own drawing. Tool, color and size are shared; the toolbar acts on
+/// the screen you last drew on and moves there. The surfaces are real Glint windows, not chrome, so
 /// captures — including the toolbar's Capture button — show the drawing. The toolbar is chrome.
 @MainActor
 final class ScreenDraw {
@@ -13,99 +14,155 @@ final class ScreenDraw {
     /// Below Glint's capture overlay (so you can capture an area of your drawing), above everything else.
     static let level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue - 1)
 
-    private(set) var model: EditorModel?
-    private var panel: DrawPanel?
-    private var toolbar: NSPanel?
-    private var bag: Any?
-    let state = DrawState()
-
-    var isShowing: Bool { panel != nil }
-    /// Showing on a display that still exists.
-    var isVisible: Bool {
-        guard let p = panel, p.isVisible else { return false }
-        return NSScreen.screens.contains { $0.frame == p.frame }
+    private struct Surface {
+        let panel: DrawPanel
+        let model: EditorModel
     }
 
-    private var screensObserver: NSObjectProtocol?
+    private var surfaces: [Surface] = []
+    /// The drawing the toolbar acts on: the screen last drawn on.
+    private(set) var model: EditorModel?
+    private var toolbar: NSPanel?
+    private var toolbarHost: NSHostingView<DrawToolbar>?
+    private var bags: [Any] = []
+    private var syncing = false
+    let state = DrawState()
+
+    var isShowing: Bool { !surfaces.isEmpty }
+    /// Showing on at least one display that still exists.
+    var isVisible: Bool { surfaces.contains { onScreen($0.panel) } }
+    var panels: [NSWindow] { surfaces.map(\.panel) }
+
+    private func onScreen(_ p: NSWindow) -> Bool { p.isVisible && NSScreen.screens.contains { $0.frame == p.frame } }
+
+    private var observers: [NSObjectProtocol] = []
 
     private init() {
-        // A display unplugged, slept or rearranged takes the drawing's screen with it: end drawing cleanly.
-        screensObserver = NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
-                                                                 object: nil, queue: .main) { _ in
+        let nc = NotificationCenter.default
+        // A display unplugged, slept or rearranged takes its surface with it; the others keep drawing.
+        observers.append(nc.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { ScreenDraw.shared.dropLostScreens() }
+        })
+        // Clicking another screen's surface makes it key: the toolbar follows it.
+        observers.append(nc.addObserver(forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main) { note in
             MainActor.assumeIsolated {
-                if ScreenDraw.shared.isShowing, !ScreenDraw.shared.isVisible { Presenter.shared.set(.draw, false) }
+                guard let w = note.object as? DrawPanel else { return }
+                ScreenDraw.shared.activate(w)
             }
-        }
+        })
     }
 
     func show() {
-        guard panel == nil else { return }
-        let screen = NSScreen.withMouse
-        let scale = screen.backingScaleFactor
-        let m = EditorModel(screenPixels: CGSize(width: screen.frame.width * scale, height: screen.frame.height * scale), scale: scale)
-        m.tool = Tool(rawValue: Prefs.d.string(forKey: "drawTool") ?? "").flatMap { m.tools.contains($0) ? $0 : nil } ?? .pen
-        m.colorIndex = min(max(Prefs.d.integer(forKey: "drawColor"), 0), palette.count - 1)
-        m.sizeIndex = Prefs.d.object(forKey: "drawSize") as? Int ?? 1
-        m.closeEditor = { Presenter.shared.set(.draw, false) }
-        bag = m.objectWillChange.sink { [weak m] _ in
-            DispatchQueue.main.async {
-                guard let m else { return }
-                Prefs.d.set(m.tool.rawValue, forKey: "drawTool")
-                Prefs.d.set(m.colorIndex, forKey: "drawColor")
-                Prefs.d.set(m.sizeIndex, forKey: "drawSize")
-            }
-        }
-        model = m
+        guard surfaces.isEmpty else { return }
+        let tool = Tool(rawValue: Prefs.d.string(forKey: "drawTool") ?? "").flatMap { EditorModel.screenTools.contains($0) ? $0 : nil } ?? .pen
+        let color = min(max(Prefs.d.integer(forKey: "drawColor"), 0), palette.count - 1)
+        let size = Prefs.d.object(forKey: "drawSize") as? Int ?? 1
         state.clickThrough = false
 
-        let p = DrawPanel(contentRect: screen.frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-        p.isOpaque = false
-        p.backgroundColor = NSColor(white: 0, alpha: 0.01) // fully clear windows let clicks through
-        p.hasShadow = false
-        p.level = Self.level
-        p.isReleasedWhenClosed = false
-        p.hidesOnDeactivate = false
-        p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
-        p.model = m
-        p.contentView = CanvasView(model: m)
-        p.setFrame(screen.frame, display: false)
-        panel = p
-        p.orderFrontRegardless()
-        p.makeKey()
+        for screen in NSScreen.screens {
+            let scale = screen.backingScaleFactor
+            let m = EditorModel(screenPixels: CGSize(width: screen.frame.width * scale, height: screen.frame.height * scale), scale: scale)
+            m.tool = tool
+            m.colorIndex = color
+            m.sizeIndex = size
+            m.closeEditor = { Presenter.shared.set(.draw, false) }
+            bags.append(m.objectWillChange.sink { [weak m] _ in
+                DispatchQueue.main.async { if let m { ScreenDraw.shared.styleChanged(in: m) } }
+            })
 
-        let host = NSHostingView(rootView: DrawToolbar(model: m, state: state))
-        let size = host.fittingSize // measure first, then pin the size
+            let p = DrawPanel(contentRect: screen.frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+            p.isOpaque = false
+            p.backgroundColor = NSColor(white: 0, alpha: 0.01) // fully clear windows let clicks through
+            p.hasShadow = false
+            p.level = Self.level
+            p.isReleasedWhenClosed = false
+            p.hidesOnDeactivate = false
+            p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+            p.model = m
+            p.contentView = CanvasView(model: m)
+            p.setFrame(screen.frame, display: false)
+            p.orderFrontRegardless()
+            surfaces.append(Surface(panel: p, model: m))
+        }
+
+        let first = surfaces.first { $0.panel.frame.contains(NSEvent.mouseLocation) } ?? surfaces[0]
+        let host = NSHostingView(rootView: DrawToolbar(model: first.model, state: state))
+        let barSize = host.fittingSize // measure first, then pin the size
         host.sizingOptions = []
-        let t = makeFloatingPanel(size: size, level: .presenting)
+        let t = makeFloatingPanel(size: barSize, level: .presenting)
         t.contentView = host
-        t.setFrameOrigin(NSPoint(x: screen.frame.midX - size.width / 2, y: screen.visibleFrame.minY + 14))
         toolbar = t
+        toolbarHost = host
+        activate(first.panel)
+        first.panel.makeKey()
         t.orderFrontRegardless()
     }
 
     func hide() {
-        (panel?.contentView as? CanvasView)?.commitText()
-        panel?.orderOut(nil)
+        for s in surfaces {
+            (s.panel.contentView as? CanvasView)?.commitText()
+            s.panel.orderOut(nil)
+        }
         toolbar?.orderOut(nil)
-        panel = nil
+        surfaces = []
         toolbar = nil
+        toolbarHost = nil
         model = nil
-        bag = nil
+        bags = []
     }
 
-    /// Lets clicks reach the apps underneath while the drawing stays on screen.
+    /// Points the toolbar at this surface's drawing and moves it to that screen.
+    private func activate(_ panel: NSWindow) {
+        guard let s = surfaces.first(where: { $0.panel === panel }), let t = toolbar, let screen = panel.screen else { return }
+        if model !== s.model {
+            model = s.model
+            toolbarHost?.rootView = DrawToolbar(model: s.model, state: state)
+        }
+        if !screen.frame.intersects(t.frame) {
+            t.setFrameOrigin(NSPoint(x: screen.frame.midX - t.frame.width / 2, y: screen.visibleFrame.minY + 14))
+        }
+    }
+
+    /// Tool, color and size are one setting for every screen.
+    private func styleChanged(in m: EditorModel) {
+        guard !syncing else { return }
+        syncing = true
+        for s in surfaces where s.model !== m {
+            if s.model.tool != m.tool { s.model.tool = m.tool }
+            if s.model.colorIndex != m.colorIndex { s.model.colorIndex = m.colorIndex }
+            if s.model.sizeIndex != m.sizeIndex { s.model.sizeIndex = m.sizeIndex }
+        }
+        syncing = false
+        Prefs.d.set(m.tool.rawValue, forKey: "drawTool")
+        Prefs.d.set(m.colorIndex, forKey: "drawColor")
+        Prefs.d.set(m.sizeIndex, forKey: "drawSize")
+    }
+
+    private func dropLostScreens() {
+        guard isShowing else { return }
+        let lost = surfaces.filter { !onScreen($0.panel) }
+        guard !lost.isEmpty else { return }
+        if lost.count == surfaces.count { Presenter.shared.set(.draw, false); return }
+        lost.forEach { $0.panel.orderOut(nil) }
+        surfaces.removeAll { s in lost.contains { $0.panel === s.panel } }
+        if let m = model, !surfaces.contains(where: { $0.model === m }) { activate(surfaces[0].panel) }
+    }
+
+    func clearAll() { surfaces.forEach { $0.model.clearAll() } }
+
+    /// Lets clicks reach the apps underneath while the drawings stay on screen.
     func setClickThrough(_ on: Bool) {
         state.clickThrough = on
-        panel?.ignoresMouseEvents = on
-        if !on { panel?.makeKey() }
+        surfaces.forEach { $0.panel.ignoresMouseEvents = on }
+        if !on { surfaces.first { $0.model === model }?.panel.makeKey() }
     }
 
-    /// Screenshot of the screen with the drawing on it, opened in the editor; drawing ends.
+    /// Screenshot of the active screen with the drawing on it, opened in the editor; drawing ends.
     func capture() {
-        guard let panel, let screen = panel.screen else { return }
-        (panel.contentView as? CanvasView)?.commitText()
-        model?.selectedID = nil
-        panel.contentView?.display()
+        guard let s = surfaces.first(where: { $0.model === model }), let screen = s.panel.screen else { return }
+        (s.panel.contentView as? CanvasView)?.commitText()
+        s.model.selectedID = nil
+        s.panel.contentView?.display()
         Task { @MainActor in
             do {
                 let f = try await CaptureService.shared.freeze([screen])[0]
@@ -136,7 +193,7 @@ final class DrawPanel: NSPanel {
         switch (ch, flags) {
         case ("z", [.command]): m.undo()
         case ("z", [.command, .shift]): m.redo()
-        case ("\u{8}", [.command]), ("\u{7f}", [.command]): m.clearAll()
+        case ("\u{8}", [.command]), ("\u{7f}", [.command]): ScreenDraw.shared.clearAll()
         default: return super.performKeyEquivalent(with: event)
         }
         return true
@@ -184,7 +241,7 @@ struct DrawToolbar: View {
             }
             divider
             IconButton(symbol: "arrow.uturn.backward", disabled: !model.canUndo, help: "Undo  ⌘Z") { model.undo() }
-            IconButton(symbol: "trash", disabled: model.annotations.isEmpty, help: "Clear All  ⌘⌫") { model.clearAll() }
+            IconButton(symbol: "trash", help: "Clear All, every screen  ⌘⌫") { ScreenDraw.shared.clearAll() }
             IconButton(symbol: state.clickThrough ? "hand.point.up.left.fill" : "hand.point.up.left",
                        selected: state.clickThrough, help: state.clickThrough ? "Back to drawing" : "Click through — use the apps underneath, keep the drawing") {
                 ScreenDraw.shared.setClickThrough(!state.clickThrough)

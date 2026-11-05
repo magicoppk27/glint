@@ -61,6 +61,10 @@ Goal of this file: "clone my glint repo, build and install it" should work in on
   the lens's temporary keys (⌃⌥=, ⌃⌥−, esc) use 200–202, so a store re-apply never drops them.
 - Overlays (halo, keystrokes, lens, draw toolbar) are `GlintChrome` panels → never in Glint captures. The draw surface is **not**
   chrome on purpose, so captures show drawings. Draw level is screenSaver−1, below the capture overlay.
+- Draw on Screen: one `DrawPanel` + `EditorModel` per display (`ScreenDraw.surfaces`); tool/color/size synced across
+  them (`styleChanged`), toolbar bound to the surface that last became key and moved to its screen; Clear All clears
+  every screen, undo is per screen; a lost display drops only its surface. `GLINT_DRAW_CLICK_TEST=1` posts a real drag,
+  `GLINT_DRAW_KEY_TEST=1` presses the real shortcut.
 - Draw on Screen reuses the editor: `EditorModel(screenPixels:scale:)` (1×1 transparent base, `screenSize`, `onScreen`,
   `tools = screenTools`), `CanvasView` with zoom 1/scale and origin 0, no window drag, no layer shadow; `Renderer` skips the base.
   Background alpha 0.01 so clicks don't pass through. Box + Step is one undo step (same as the editor).
